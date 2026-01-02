@@ -63,7 +63,7 @@ face/
 ### Step 1: Clone or Download
 
 ```bash
-cd c:\Users\WIN.11\Desktop\face
+[text](https://github.com/ashlinpj/fisat_face_detection_system.git)
 ```
 
 ### Step 2: Create Virtual Environment (Recommended)
