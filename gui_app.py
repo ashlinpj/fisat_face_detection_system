@@ -20,6 +20,31 @@ import database
 from face_recognition_module import FaceRecognitionSystem
 
 class CanteenFaceDetectionGUI:
+    def register_from_file(self):
+        """Register student from image file"""
+        from tkinter import simpledialog, filedialog
+        filepath = filedialog.askopenfilename(
+            title="Select Student Photo",
+            filetypes=[
+                ("Image files", "*.jpg *.jpeg *.png"),
+                ("All files", "*.*")
+            ]
+        )
+        if not filepath:
+            return
+        student_id = simpledialog.askstring("Student ID", "Enter Student ID:")
+        if not student_id:
+            return
+        name = simpledialog.askstring("Name", "Enter Full Name:")
+        department = simpledialog.askstring("Department", "Enter Department:")
+        year = simpledialog.askinteger("Year", "Enter Year (1-4):")
+        success = self.face_system.register_from_image(
+            filepath, student_id, name, department, year
+        )
+        if success:
+            messagebox.showinfo("Success", f"Registered {name}!")
+        else:
+            messagebox.showerror("Error", "Registration failed!")
     def __init__(self):
         self.root = tk.Tk()
         self.root.title(config.WINDOW_TITLE)
@@ -196,12 +221,16 @@ class CanteenFaceDetectionGUI:
         toolbar = ttk.Frame(self.students_tab)
         toolbar.pack(fill=tk.X, pady=(0, 10))
         
+
         add_btn = ttk.Button(toolbar, text="➕ Add Student", command=self.add_student_dialog)
         add_btn.pack(side=tk.LEFT, padx=5)
-        
+
+        upload_btn = ttk.Button(toolbar, text="🖼️ Register from Image", command=self.register_from_file)
+        upload_btn.pack(side=tk.LEFT, padx=5)
+
         refresh_btn = ttk.Button(toolbar, text="🔄 Refresh", command=self.refresh_students)
         refresh_btn.pack(side=tk.LEFT, padx=5)
-        
+
         delete_btn = ttk.Button(toolbar, text="🗑️ Delete Selected", command=self.delete_student)
         delete_btn.pack(side=tk.LEFT, padx=5)
         
@@ -612,7 +641,7 @@ class CanteenFaceDetectionGUI:
         filepath = filedialog.asksaveasfilename(
             defaultextension=".csv",
             filetypes=[("CSV files", "*.csv")],
-            initialfilename=f"canteen_logs_{datetime.now().strftime('%Y%m%d')}.csv"
+            initialfile=f"canteen_logs_{datetime.now().strftime('%Y%m%d')}.csv"
         )
         
         if filepath:

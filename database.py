@@ -55,6 +55,7 @@ def init_database():
             duration_minutes INTEGER,
             date DATE DEFAULT (DATE('now', 'localtime')),
             is_known INTEGER DEFAULT 1,
+            screenshot_path TEXT,
             FOREIGN KEY (student_db_id) REFERENCES students(id)
         )
     ''')
@@ -193,17 +194,15 @@ def delete_student(student_id: str) -> bool:
         print(f"Error deleting student: {e}")
         return False
 
-def log_visit(student_db_id: int, student_id: str, student_name: str, is_known: bool = True) -> int:
-    """Log a canteen visit"""
+def log_visit(student_db_id: int, student_id: str, student_name: str, screenshot_path: str = None, is_known: bool = True) -> int:
+    """Log a canteen visit with screenshot"""
     try:
         conn = get_connection()
         cursor = conn.cursor()
-        
         cursor.execute('''
-            INSERT INTO visit_logs (student_db_id, student_id, student_name, is_known)
-            VALUES (?, ?, ?, ?)
-        ''', (student_db_id, student_id, student_name, 1 if is_known else 0))
-        
+            INSERT INTO visit_logs (student_db_id, student_id, student_name, is_known, screenshot_path)
+            VALUES (?, ?, ?, ?, ?)
+        ''', (student_db_id, student_id, student_name, 1 if is_known else 0, screenshot_path))
         log_id = cursor.lastrowid
         conn.commit()
         conn.close()

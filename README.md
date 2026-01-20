@@ -22,32 +22,40 @@ A real-time face detection and recognition system designed to track student visi
 
 ## 🛠️ Technology Stack
 
-| Component | Technology |
-|-----------|------------|
-| Face Detection | YOLOv8 (Ultralytics) |
+| Component        | Technology            |
+| ---------------- | --------------------- |
+| Face Detection   | YOLOv8 (Ultralytics)  |
 | Face Recognition | DeepFace (Facenet512) |
-| Database | SQLite |
-| GUI | Tkinter |
-| Image Processing | OpenCV |
-| Language | Python 3.10+ |
+| Database         | SQLite                |
+| GUI              | Tkinter               |
+| Image Processing | OpenCV                |
+| Language         | Python 3.10+          |
 
 ---
 
 ## 📁 Project Structure
 
 ```
-face/
+fisat_face_detection_system/
 ├── config.py                  # Configuration settings
 ├── database.py                # Database operations
 ├── face_recognition_module.py # Face detection & recognition
+├── gui_app.py                 # GUI application (Tkinter)
 ├── main.py                    # Command-line application
-├── gui_app.py                 # GUI application
 ├── requirements.txt           # Python dependencies
-├── README.md                  # This file
-├── database/                  # Auto-created
-│   ├── canteen.db            # SQLite database
-│   └── faces/                # Stored face images
-└── screenshots/              # Captured screenshots
+├── setup.py                   # Setup script (optional)
+├── start.bat                  # Windows batch starter
+├── test_system.py             # System test script
+├── utils.py                   # Utility functions
+├── README.md                  # Project documentation
+├── database/                  # Database folder
+│   ├── canteen.db             # SQLite database file
+│   └── faces/                 # Stored face images (per student)
+├── screenshots/               # Captured screenshots
+├── __pycache__/               # Python bytecode cache
+│   └── ...                    # Compiled .pyc files
+└── venv/                      # (Optional) Virtual environment
+    └── ...
 ```
 
 ---
@@ -101,6 +109,7 @@ python gui_app.py
 ```
 
 **Features:**
+
 - 📹 Live Detection tab - Real-time face detection
 - 👥 Students tab - Manage registered students
 - 📋 Visit Logs tab - View and export visit history
@@ -113,6 +122,7 @@ python main.py
 ```
 
 **Menu Options:**
+
 1. Start Real-time Detection
 2. Register New Student
 3. View Statistics
@@ -122,13 +132,13 @@ python main.py
 
 ### Keyboard Controls (During Detection)
 
-| Key | Action |
-|-----|--------|
-| Q | Quit detection |
-| R | Register new student |
-| S | Show statistics |
-| L | Show today's logs |
-| Space | Capture screenshot |
+| Key   | Action               |
+| ----- | -------------------- |
+| Q     | Quit detection       |
+| R     | Register new student |
+| S     | Show statistics      |
+| L     | Show today's logs    |
+| Space | Capture screenshot   |
 
 ---
 
@@ -145,6 +155,14 @@ python main.py
    - Year (1-4)
 4. Look at the camera
 5. System captures and registers the face
+
+### Method 2: Register from Image File (Admin)
+
+1. Go to the **Students** tab in the GUI
+2. Click **🖼️ Register from Image**
+3. Select a high-resolution student photo (JPG/PNG)
+4. Enter student details when prompted
+5. The system will detect, enhance, and register the student from the image
 
 ### Method 2: Batch Registration (Advanced)
 
@@ -174,28 +192,31 @@ system.register_new_student(
 ## 📊 Database Schema
 
 ### Students Table
-| Column | Type | Description |
-|--------|------|-------------|
-| id | INTEGER | Primary Key |
-| student_id | TEXT | Unique Student ID |
-| name | TEXT | Student Name |
-| department | TEXT | Department |
-| year | INTEGER | Year of Study |
-| face_embedding | TEXT | Face vector (JSON) |
-| face_image_path | TEXT | Path to face image |
-| created_at | TIMESTAMP | Registration time |
+
+| Column          | Type      | Description        |
+| --------------- | --------- | ------------------ |
+| id              | INTEGER   | Primary Key        |
+| student_id      | TEXT      | Unique Student ID  |
+| name            | TEXT      | Student Name       |
+| department      | TEXT      | Department         |
+| year            | INTEGER   | Year of Study      |
+| face_embedding  | TEXT      | Face vector (JSON) |
+| face_image_path | TEXT      | Path to face image |
+| created_at      | TIMESTAMP | Registration time  |
 
 ### Visit Logs Table
-| Column | Type | Description |
-|--------|------|-------------|
-| id | INTEGER | Primary Key |
-| student_id | TEXT | Student ID |
-| student_name | TEXT | Student Name |
-| entry_time | TIMESTAMP | Entry time |
-| exit_time | TIMESTAMP | Exit time |
-| duration_minutes | INTEGER | Visit duration |
-| date | DATE | Visit date |
-| is_known | INTEGER | 1=Known, 0=Unknown |
+
+| Column           | Type      | Description              |
+| ---------------- | --------- | ------------------------ |
+| id               | INTEGER   | Primary Key              |
+| student_id       | TEXT      | Student ID               |
+| student_name     | TEXT      | Student Name             |
+| entry_time       | TIMESTAMP | Entry time               |
+| exit_time        | TIMESTAMP | Exit time                |
+| duration_minutes | INTEGER   | Visit duration           |
+| date             | DATE      | Visit date               |
+| is_known         | INTEGER   | 1=Known, 0=Unknown       |
+| screenshot_path  | TEXT      | Path to visit screenshot |
 
 ---
 
@@ -222,20 +243,24 @@ MIN_TIME_BETWEEN_LOGS = 30    # Seconds between same person logs
 ## 🔧 Troubleshooting
 
 ### Camera not detected
+
 - Check if camera is connected
 - Try different `CAMERA_INDEX` values (0, 1, 2)
 - Ensure no other application is using the camera
 
 ### Low detection accuracy
+
 - Ensure good lighting
 - Face should be clearly visible
 - Increase `FACE_RECOGNITION_THRESHOLD` for stricter matching
 
 ### Slow performance
+
 - Reduce `FRAME_WIDTH` and `FRAME_HEIGHT`
 - Use GPU if available (CUDA-enabled TensorFlow)
 
 ### Model download issues
+
 - Ensure internet connection for first run
 - Models are cached after first download
 
@@ -257,6 +282,7 @@ MIN_TIME_BETWEEN_LOGS = 30    # Seconds between same person logs
 **Academic Year:** 2025-26
 
 ### Technologies Learned
+
 - Deep Learning (YOLO, CNN)
 - Face Recognition Systems
 - Real-time Image Processing
