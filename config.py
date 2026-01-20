@@ -18,18 +18,21 @@ for folder in [FACES_DIR, SCREENSHOTS_DIR]:
         os.makedirs(folder)
 
 # --- APPLICATION SETTINGS ---
-WINDOW_TITLE = "College Canteen Face Detection System"  # <--- This was missing
+WINDOW_TITLE = "College Canteen Face Detection System"
 CAMERA_INDEX = 0  # 0 for webcam, 1 or 2 for external USB cameras
 FRAME_WIDTH = 1280
 FRAME_HEIGHT = 720
 
 # --- AI & DETECTION SETTINGS ---
 CONFIDENCE_THRESHOLD = 0.5    # YOLO Detection confidence (0.0 to 1.0)
-FACE_RECOGNITION_THRESHOLD = 0.35  # Lower = Stricter matching (0.35 is good for Facenet512)
+FACE_RECOGNITION_THRESHOLD = 0.40  # Slightly looser (0.40) to ensure detection happens easily
 FACE_EMBEDDING_MODEL = "Facenet512" 
 DETECTION_SCALE = 0.5  # Scale down frame for faster detection (0.5 = 50% size)
 
 # --- SYSTEM SETTINGS ---
-LOG_COOLDOWN = 60             # Seconds to wait before logging the same person again
+# CRITICAL FIX: Increased to 120 seconds (2 minutes) to prevent log spam.
+# The system will only write to the DB once every 2 minutes per person.
+LOG_COOLDOWN = 120             
+
 USE_GPU = True                # Tries to use GPU if available
 USE_THREADED_RECOGNITION = True
