@@ -1,61 +1,150 @@
 """
 GUI Application - College Canteen Face Detection System
 Modern Tkinter-based graphical user interface
+Includes Multi-Image Upload & Training Integration
 """
 
 import tkinter as tk
-from tkinter import ttk, messagebox, filedialog
+from tkinter import ttk, messagebox, filedialog, simpledialog
 import cv2
 from PIL import Image, ImageTk
 import threading
 import os
 import sys
-from datetime import datetime, timedelta
+import shutil
+from datetime import datetime
+import time
 
 # Add current directory to path
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
+# Import Project Modules
 import config
 import database
+import train_model
 from face_recognition_module import FaceRecognitionSystem
+# Try importing utils for export, fail gracefully if missing
+try:
+    from utils import export_logs_to_csv
+except ImportError:
+    export_logs_to_csv = None
+
+class RegistrationDialog(tk.Toplevel):
+    """
+    Custom Dialog for Registering Students
+    Supports both Webcam Capture and Multi-File Upload
+    """
+    def __init__(self, parent):
+        super().__init__(parent)
+        self.title("Register New Student")
+        self.geometry("450x600")
+        self.configure(bg="#f0f0f0")
+        self.transient(parent)
+        self.grab_set()
+        
+        self.result = None
+        self.mode = None # 'webcam' or 'upload'
+        self.uploaded_files = []
+        
+        # Style
+        style = ttk.Style()
+        style.configure("Reg.TLabel", font=("Segoe UI", 10))
+        
+        # --- Form Container ---
+        main_frame = ttk.Frame(self, padding="20")
+        main_frame.pack(fill="both", expand=True)
+        
+        # --- Fields ---
+        ttk.Label(main_frame, text="Student ID (Unique):", style="Reg.TLabel").pack(fill="x", pady=2)
+        self.id_entry = ttk.Entry(main_frame)
+        self.id_entry.pack(fill="x", pady=5)
+        
+        ttk.Label(main_frame, text="Full Name:", style="Reg.TLabel").pack(fill="x", pady=2)
+        self.name_entry = ttk.Entry(main_frame)
+        self.name_entry.pack(fill="x", pady=5)
+        
+        ttk.Label(main_frame, text="Department:", style="Reg.TLabel").pack(fill="x", pady=2)
+        self.dept_combo = ttk.Combobox(main_frame, values=["CSE", "ECE", "EEE", "ME", "CE", "AI&DS", "Robotics", "General"])
+        self.dept_combo.pack(fill="x", pady=5)
+        self.dept_combo.current(0)
+        
+        ttk.Label(main_frame, text="Year:", style="Reg.TLabel").pack(fill="x", pady=2)
+        self.year_combo = ttk.Combobox(main_frame, values=["1", "2", "3", "4"])
+        self.year_combo.pack(fill="x", pady=5)
+        self.year_combo.current(0)
+        
+        # --- Divider ---
+        ttk.Separator(main_frame, orient="horizontal").pack(fill="x", pady=20)
+        
+        # --- Action Buttons ---
+        ttk.Label(main_frame, text="Choose Registration Method:", font=("Segoe UI", 10, "bold")).pack(pady=5)
+
+        # 1. Webcam Button
+        self.btn_capture = tk.Button(main_frame, text="📷 Capture from Webcam", 
+                                   bg="#27ae60", fg="white", font=("Segoe UI", 11),
+                                   command=self.use_webcam)
+        self.btn_capture.pack(fill="x", pady=5)
+        
+        tk.Label(main_frame, text="- OR -", bg="#f0f0f0", fg="#7f8c8d").pack(pady=2)
+        
+        # 2. Upload Button
+        self.btn_upload = tk.Button(main_frame, text="📂 Upload Photos (Multiple)", 
+                                  bg="#2980b9", fg="white", font=("Segoe UI", 11),
+                                  command=self.choose_files)
+        self.btn_upload.pack(fill="x", pady=5)
+        
+        # Status Label
+        self.lbl_status = tk.Label(main_frame, text="", bg="#f0f0f0", fg="#e67e22")
+        self.lbl_status.pack(pady=10)
+
+    def validate_inputs(self):
+        if not self.id_entry.get().strip() or not self.name_entry.get().strip():
+            messagebox.showerror("Error", "Student ID and Name are required!")
+            return False
+        return True
+
+    def use_webcam(self):
+        if self.validate_inputs():
+            self.mode = 'webcam'
+            self.save_data()
+
+    def choose_files(self):
+        if not self.validate_inputs():
+            return
+            
+        files = filedialog.askopenfilenames(
+            parent=self,
+            title="Select Student Photos (Front, Side, etc.)",
+            filetypes=[("Images", "*.jpg *.jpeg *.png")]
+        )
+        if files:
+            self.uploaded_files = list(files)
+            self.lbl_status.config(text=f"✅ Selected {len(files)} files")
+            self.mode = 'upload'
+            
+            # Show Confirm Button if files selected
+            if not hasattr(self, 'btn_confirm'):
+                self.btn_confirm = tk.Button(self, text="✅ Confirm & Save", 
+                                           bg="#2c3e50", fg="white", font=("Segoe UI", 11, "bold"),
+                                           command=self.save_data)
+                self.btn_confirm.pack(fill="x", side="bottom", padx=20, pady=20)
+
+    def save_data(self):
+        self.result = {
+            "id": self.id_entry.get().strip(),
+            "name": self.name_entry.get().strip(),
+            "dept": self.dept_combo.get(),
+            "year": int(self.year_combo.get())
+        }
+        self.destroy()
+
 
 class CanteenFaceDetectionGUI:
-    def register_from_file(self):
-        """Register student from image file"""
-        from tkinter import simpledialog, filedialog
-        filepath = filedialog.askopenfilename(
-            title="Select Student Photo",
-            filetypes=[
-                ("Image files", "*.jpg *.jpeg *.png"),
-                ("All files", "*.*")
-            ]
-        )
-        if not filepath:
-            return
-        student_id = simpledialog.askstring("Student ID", "Enter Student ID:")
-        if not student_id:
-            return
-        name = simpledialog.askstring("Name", "Enter Full Name:")
-        department = simpledialog.askstring("Department", "Enter Department:")
-        year = simpledialog.askinteger("Year", "Enter Year (1-4):")
-        success = self.face_system.register_from_image(
-            filepath, student_id, name, department, year
-        )
-        if success:
-            messagebox.showinfo("Success", f"Registered {name}!")
-        else:
-            messagebox.showerror("Error", "Registration failed!")
     def __init__(self):
         self.root = tk.Tk()
-        self.root.title(config.WINDOW_TITLE)
-        self.root.geometry("1400x800")
+        self.root.title(getattr(config, 'WINDOW_TITLE', "College Canteen Face Detection"))
+        self.root.geometry("1400x850")
         self.root.minsize(1200, 700)
-        
-        # Set icon if available
-        try:
-            self.root.iconbitmap("icon.ico")
-        except:
-            pass
         
         # Initialize variables
         self.cap = None
@@ -82,13 +171,10 @@ class CanteenFaceDetectionGUI:
         style.theme_use('clam')
         
         # Custom styles
-        style.configure('Title.TLabel', font=('Segoe UI', 16, 'bold'))
+        style.configure('Title.TLabel', font=('Segoe UI', 18, 'bold'))
         style.configure('Header.TLabel', font=('Segoe UI', 12, 'bold'))
         style.configure('Status.TLabel', font=('Segoe UI', 10))
-        style.configure('Big.TButton', font=('Segoe UI', 11), padding=10)
-        style.configure('Success.TLabel', foreground='green', font=('Segoe UI', 10, 'bold'))
-        style.configure('Warning.TLabel', foreground='orange', font=('Segoe UI', 10, 'bold'))
-        style.configure('Danger.TLabel', foreground='red', font=('Segoe UI', 10, 'bold'))
+        style.configure('Big.TButton', font=('Segoe UI', 11, 'bold'), padding=10)
     
     def build_ui(self):
         """Build the main user interface"""
@@ -139,77 +225,63 @@ class CanteenFaceDetectionGUI:
         self.build_stats_tab()
     
     def build_detection_tab(self):
-        """Build the live detection tab"""
+        """Build the live detection tab - LAYOUT FIXED"""
         # Split into left (video) and right (info) panels
         left_frame = ttk.Frame(self.detection_tab)
         left_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(0, 5))
         
-        right_frame = ttk.Frame(self.detection_tab, width=300)
+        right_frame = ttk.Frame(self.detection_tab, width=320)
         right_frame.pack(side=tk.RIGHT, fill=tk.Y, padx=(5, 0))
         right_frame.pack_propagate(False)
         
-        # Video display
-        video_frame = ttk.LabelFrame(left_frame, text="Camera Feed", padding="5")
-        video_frame.pack(fill=tk.BOTH, expand=True)
-        
-        self.video_label = ttk.Label(video_frame, text="Camera not started")
-        self.video_label.pack(fill=tk.BOTH, expand=True)
-        
-        # Control buttons
+        # --- 1. CONTROL FRAME (Bottom) ---
+        # We pack this FIRST so it reserves its space at the bottom immediately.
         control_frame = ttk.Frame(left_frame)
-        control_frame.pack(fill=tk.X, pady=10)
+        control_frame.pack(side=tk.BOTTOM, fill=tk.X, pady=10, anchor="s")
         
-        self.start_btn = ttk.Button(
-            control_frame,
-            text="▶ Start Detection",
-            style='Big.TButton',
-            command=self.toggle_detection
-        )
+        # Buttons
+        self.start_btn = ttk.Button(control_frame, text="▶ Start Detection", style='Big.TButton', command=self.toggle_detection)
         self.start_btn.pack(side=tk.LEFT, padx=5)
         
-        self.register_btn = ttk.Button(
-            control_frame,
-            text="➕ Register Face",
-            style='Big.TButton',
-            command=self.open_registration_dialog
-        )
+        self.register_btn = ttk.Button(control_frame, text="➕ Register / Upload", style='Big.TButton', command=self.open_registration_dialog)
         self.register_btn.pack(side=tk.LEFT, padx=5)
         
-        screenshot_btn = ttk.Button(
-            control_frame,
-            text="📷 Screenshot",
-            command=self.take_screenshot
-        )
-        screenshot_btn.pack(side=tk.LEFT, padx=5)
+        self.train_btn = tk.Button(control_frame, text="🔄 Train System", font=('Segoe UI', 11, 'bold'), bg="#e67e22", fg="white", command=self.run_training)
+        self.train_btn.pack(side=tk.LEFT, padx=5, fill="y")
+
+        ttk.Button(control_frame, text="📷 Screenshot", command=self.take_screenshot).pack(side=tk.RIGHT, padx=5)
         
-        # Right panel - Detection info
-        info_frame = ttk.LabelFrame(right_frame, text="Detection Info", padding="10")
+        # --- 2. VIDEO FRAME (Top) ---
+        # We use pack_propagate(False) so the frame respects constraints
+        video_frame = ttk.LabelFrame(left_frame, text="Camera Feed", padding="5")
+        video_frame.pack(side=tk.TOP, fill=tk.BOTH, expand=True)
+        video_frame.pack_propagate(False)
+        
+        self.video_label = ttk.Label(video_frame, text="Camera not started", background="black", foreground="white")
+        self.video_label.pack(fill=tk.BOTH, expand=True)
+        # Bind resize event to adjust video size dynamically
+        self.video_label.bind('<Configure>', lambda e: None) 
+        
+        # --- Right Panel (Stats) ---
+        info_frame = ttk.LabelFrame(right_frame, text="Real-time Info", padding="10")
         info_frame.pack(fill=tk.X, pady=(0, 10))
         
-        self.detected_count_label = ttk.Label(info_frame, text="Faces Detected: 0")
+        self.detected_count_label = ttk.Label(info_frame, text="Faces: 0", font=("Segoe UI", 12))
         self.detected_count_label.pack(anchor=tk.W)
-        
-        self.known_count_label = ttk.Label(info_frame, text="Known: 0")
-        self.known_count_label.pack(anchor=tk.W)
-        
-        self.unknown_count_label = ttk.Label(info_frame, text="Unknown: 0")
-        self.unknown_count_label.pack(anchor=tk.W)
         
         self.fps_label = ttk.Label(info_frame, text="FPS: 0")
         self.fps_label.pack(anchor=tk.W)
         
-        # Recent detections
-        recent_frame = ttk.LabelFrame(right_frame, text="Recent Detections", padding="10")
+        recent_frame = ttk.LabelFrame(right_frame, text="Recent Recognitions", padding="10")
         recent_frame.pack(fill=tk.BOTH, expand=True)
         
-        self.recent_listbox = tk.Listbox(recent_frame, font=('Consolas', 9))
+        self.recent_listbox = tk.Listbox(recent_frame, font=('Consolas', 10), bg="#ecf0f1")
         self.recent_listbox.pack(fill=tk.BOTH, expand=True)
         
-        # Today's stats
         today_frame = ttk.LabelFrame(right_frame, text="Today's Summary", padding="10")
         today_frame.pack(fill=tk.X, pady=(10, 0))
         
-        self.today_visits_label = ttk.Label(today_frame, text="Total Visits: 0")
+        self.today_visits_label = ttk.Label(today_frame, text="Total Visits: 0", font=("Segoe UI", 10, "bold"))
         self.today_visits_label.pack(anchor=tk.W)
         
         self.today_unique_label = ttk.Label(today_frame, text="Unique Visitors: 0")
@@ -217,18 +289,13 @@ class CanteenFaceDetectionGUI:
     
     def build_students_tab(self):
         """Build the student management tab"""
-        # Toolbar
         toolbar = ttk.Frame(self.students_tab)
         toolbar.pack(fill=tk.X, pady=(0, 10))
         
-
-        add_btn = ttk.Button(toolbar, text="➕ Add Student", command=self.add_student_dialog)
+        add_btn = ttk.Button(toolbar, text="➕ Add / Upload Student", command=self.open_registration_dialog)
         add_btn.pack(side=tk.LEFT, padx=5)
 
-        upload_btn = ttk.Button(toolbar, text="🖼️ Register from Image", command=self.register_from_file)
-        upload_btn.pack(side=tk.LEFT, padx=5)
-
-        refresh_btn = ttk.Button(toolbar, text="🔄 Refresh", command=self.refresh_students)
+        refresh_btn = ttk.Button(toolbar, text="🔄 Refresh List", command=self.refresh_students)
         refresh_btn.pack(side=tk.LEFT, padx=5)
 
         delete_btn = ttk.Button(toolbar, text="🗑️ Delete Selected", command=self.delete_student)
@@ -263,7 +330,6 @@ class CanteenFaceDetectionGUI:
     
     def build_logs_tab(self):
         """Build the visit logs tab"""
-        # Filters
         filter_frame = ttk.Frame(self.logs_tab)
         filter_frame.pack(fill=tk.X, pady=(0, 10))
         
@@ -279,9 +345,6 @@ class CanteenFaceDetectionGUI:
         
         filter_btn = ttk.Button(filter_frame, text="🔍 Filter", command=self.refresh_logs)
         filter_btn.pack(side=tk.LEFT, padx=5)
-        
-        clear_btn = ttk.Button(filter_frame, text="Clear", command=self.clear_log_filters)
-        clear_btn.pack(side=tk.LEFT, padx=5)
         
         export_btn = ttk.Button(filter_frame, text="📥 Export CSV", command=self.export_logs)
         export_btn.pack(side=tk.RIGHT, padx=5)
@@ -307,40 +370,25 @@ class CanteenFaceDetectionGUI:
     
     def build_stats_tab(self):
         """Build the statistics tab"""
-        # Summary cards
         cards_frame = ttk.Frame(self.stats_tab)
         cards_frame.pack(fill=tk.X, pady=10)
         
-        # Card 1: Total Students
-        card1 = ttk.LabelFrame(cards_frame, text="Total Students", padding="20")
-        card1.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=5)
-        self.stat_students = ttk.Label(card1, text="0", font=('Segoe UI', 24, 'bold'))
-        self.stat_students.pack()
+        def make_card(parent, title):
+            frame = ttk.LabelFrame(parent, text=title, padding="20")
+            frame.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=5)
+            lbl = ttk.Label(frame, text="0", font=('Segoe UI', 24, 'bold'))
+            lbl.pack()
+            return lbl
+
+        self.stat_students = make_card(cards_frame, "Total Students")
+        self.stat_today = make_card(cards_frame, "Today's Visits")
+        self.stat_unique = make_card(cards_frame, "Unique Visitors")
+        self.stat_unknown = make_card(cards_frame, "Unknown Faces")
         
-        # Card 2: Today's Visits
-        card2 = ttk.LabelFrame(cards_frame, text="Today's Visits", padding="20")
-        card2.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=5)
-        self.stat_today = ttk.Label(card2, text="0", font=('Segoe UI', 24, 'bold'))
-        self.stat_today.pack()
-        
-        # Card 3: Unique Today
-        card3 = ttk.LabelFrame(cards_frame, text="Unique Visitors Today", padding="20")
-        card3.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=5)
-        self.stat_unique = ttk.Label(card3, text="0", font=('Segoe UI', 24, 'bold'))
-        self.stat_unique.pack()
-        
-        # Card 4: Unknown Today
-        card4 = ttk.LabelFrame(cards_frame, text="Unknown Faces Today", padding="20")
-        card4.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=5)
-        self.stat_unknown = ttk.Label(card4, text="0", font=('Segoe UI', 24, 'bold'))
-        self.stat_unknown.pack()
-        
-        # Refresh button
         refresh_btn = ttk.Button(self.stats_tab, text="🔄 Refresh Statistics", command=self.refresh_statistics)
         refresh_btn.pack(pady=10)
         
-        # Detailed stats frame
-        details_frame = ttk.LabelFrame(self.stats_tab, text="Detailed Statistics", padding="10")
+        details_frame = ttk.LabelFrame(self.stats_tab, text="Detailed Report", padding="10")
         details_frame.pack(fill=tk.BOTH, expand=True, pady=10)
         
         self.stats_text = tk.Text(details_frame, font=('Consolas', 10), height=15)
@@ -363,18 +411,17 @@ class CanteenFaceDetectionGUI:
         threading.Thread(target=init_thread, daemon=True).start()
     
     def update_status(self, text, color="black"):
-        """Update status label"""
-        self.status_label.config(text=text)
+        self.status_label.config(text=text, foreground=color)
     
+    # --- ACTION HANDLERS ---
+
     def toggle_detection(self):
-        """Start or stop detection"""
         if self.is_running:
             self.stop_detection()
         else:
             self.start_detection()
     
     def start_detection(self):
-        """Start live detection"""
         if self.face_system is None:
             messagebox.showerror("Error", "System not initialized yet!")
             return
@@ -395,7 +442,6 @@ class CanteenFaceDetectionGUI:
         self.video_thread.start()
     
     def stop_detection(self):
-        """Stop live detection"""
         self.is_running = False
         if self.cap:
             self.cap.release()
@@ -404,7 +450,6 @@ class CanteenFaceDetectionGUI:
         self.video_label.config(image='', text="Camera stopped")
     
     def video_loop(self):
-        """Main video processing loop"""
         import time
         frame_count = 0
         start_time = time.time()
@@ -412,255 +457,223 @@ class CanteenFaceDetectionGUI:
         
         while self.is_running:
             ret, frame = self.cap.read()
-            if not ret:
-                break
+            if not ret: break
             
             self.current_frame = frame.copy()
             
-            # Process frame
+            # AI Processing
             annotated_frame, recognized_people = self.face_system.process_frame(frame)
             
-            # Calculate FPS
+            # FPS Calculation
             frame_count += 1
-            elapsed = time.time() - start_time
-            if elapsed >= 1.0:
-                fps = frame_count / elapsed
+            if time.time() - start_time >= 1.0:
+                fps = frame_count / (time.time() - start_time)
                 frame_count = 0
                 start_time = time.time()
             
-            # Convert for display
-            annotated_frame = cv2.cvtColor(annotated_frame, cv2.COLOR_BGR2RGB)
+            # UI Updates (Thread Safe)
+            img = cv2.cvtColor(annotated_frame, cv2.COLOR_BGR2RGB)
+            img = Image.fromarray(img)
             
-            # Resize for display
-            display_width = 800
-            h, w = annotated_frame.shape[:2]
-            scale = display_width / w
-            display_height = int(h * scale)
-            annotated_frame = cv2.resize(annotated_frame, (display_width, display_height))
+            # Smart Resize logic for UI
+            w_canvas = self.video_label.winfo_width()
+            h_canvas = self.video_label.winfo_height()
             
-            # Convert to PhotoImage
-            img = Image.fromarray(annotated_frame)
+            # Default if too small (start up)
+            if w_canvas < 100: w_canvas = 800
+            if h_canvas < 100: h_canvas = 600
+
+            # Resize keeping aspect ratio roughly fit
+            img = img.resize((w_canvas, h_canvas), Image.Resampling.LANCZOS)
             imgtk = ImageTk.PhotoImage(image=img)
             
-            # Update UI
-            def update_ui():
+            def update_ui_elements():
                 self.video_label.imgtk = imgtk
                 self.video_label.config(image=imgtk)
-                
-                known = sum(1 for p in recognized_people if p['is_known'])
-                unknown = len(recognized_people) - known
-                
-                self.detected_count_label.config(text=f"Faces Detected: {len(recognized_people)}")
-                self.known_count_label.config(text=f"Known: {known}")
-                self.unknown_count_label.config(text=f"Unknown: {unknown}")
                 self.fps_label.config(text=f"FPS: {fps:.1f}")
+                self.detected_count_label.config(text=f"Faces: {len(recognized_people)}")
                 
-                # Update recent detections
+                # Update Listbox if someone known is found
                 for person in recognized_people:
-                    if person['is_known']:
+                    if person.get('student'):
                         name = person['student']['name']
-                        time_str = datetime.now().strftime('%H:%M:%S')
-                        self.recent_listbox.insert(0, f"{time_str} - {name}")
-                        if self.recent_listbox.size() > 20:
-                            self.recent_listbox.delete(20, tk.END)
+                        ts = datetime.now().strftime('%H:%M:%S')
+                        entry = f"{ts} - {name}"
+                        
+                        # Avoid duplicate spam in listbox (check top item)
+                        if self.recent_listbox.size() == 0 or self.recent_listbox.get(0) != entry:
+                            self.recent_listbox.insert(0, entry)
+                            if self.recent_listbox.size() > 20:
+                                self.recent_listbox.delete(20, tk.END)
+
+            self.root.after(0, update_ui_elements)
             
-            self.root.after(0, update_ui)
-            
-            # Small delay to prevent overloading
-            time.sleep(0.03)
-    
+            # Small sleep to prevent CPU hogging in loop
+            time.sleep(0.01)
+
     def open_registration_dialog(self):
-        """Open dialog to register new student"""
-        if not self.is_running:
-            messagebox.showwarning("Warning", "Please start detection first!")
-            return
+        """Open the unified registration dialog"""
+        dialog = RegistrationDialog(self.root)
+        self.root.wait_window(dialog)
         
-        dialog = tk.Toplevel(self.root)
-        dialog.title("Register New Student")
-        dialog.geometry("400x300")
-        dialog.transient(self.root)
-        dialog.grab_set()
-        
-        # Form fields
-        ttk.Label(dialog, text="Student ID:").pack(pady=5)
-        id_entry = ttk.Entry(dialog, width=30)
-        id_entry.pack()
-        
-        ttk.Label(dialog, text="Name:").pack(pady=5)
-        name_entry = ttk.Entry(dialog, width=30)
-        name_entry.pack()
-        
-        ttk.Label(dialog, text="Department:").pack(pady=5)
-        dept_entry = ttk.Entry(dialog, width=30)
-        dept_entry.pack()
-        
-        ttk.Label(dialog, text="Year (1-4):").pack(pady=5)
-        year_var = tk.StringVar(value="1")
-        year_combo = ttk.Combobox(dialog, textvariable=year_var, values=['1', '2', '3', '4'], width=27)
-        year_combo.pack()
-        
-        def do_register():
-            student_id = id_entry.get().strip()
-            name = name_entry.get().strip()
-            department = dept_entry.get().strip()
-            year = int(year_var.get())
+        if dialog.result:
+            data = dialog.result
+            student_id = data['id']
+            saved_paths = []
             
-            if not student_id or not name:
-                messagebox.showerror("Error", "Student ID and Name are required!")
-                return
-            
-            if self.current_frame is not None:
-                success = self.face_system.register_new_student(
-                    self.current_frame, student_id, name, department, year
-                )
+            # 1. Webcam Capture
+            if dialog.mode == 'webcam':
+                if not self.is_running or self.current_frame is None:
+                     # Try to capture one frame if detection isn't running
+                     temp_cap = cv2.VideoCapture(config.CAMERA_INDEX)
+                     ret, frame = temp_cap.read()
+                     temp_cap.release()
+                     if ret:
+                         self.current_frame = frame
+                     else:
+                         messagebox.showerror("Error", "Camera not available!")
+                         return
+
+                filename = f"{student_id}_cam_{int(time.time())}.jpg"
+                path = os.path.join(config.FACES_DIR, filename)
+                cv2.imwrite(path, self.current_frame)
+                saved_paths.append(path)
                 
-                if success:
-                    messagebox.showinfo("Success", f"Student {name} registered successfully!")
-                    dialog.destroy()
-                    self.refresh_students()
+            # 2. File Upload
+            elif dialog.mode == 'upload':
+                for idx, src_path in enumerate(dialog.uploaded_files):
+                    try:
+                        img = cv2.imread(src_path)
+                        if img is not None:
+                            filename = f"{student_id}_upload_{int(time.time())}_{idx}.jpg"
+                            dest_path = os.path.join(config.FACES_DIR, filename)
+                            cv2.imwrite(dest_path, img)
+                            saved_paths.append(dest_path)
+                    except Exception as e:
+                        print(f"Error copying {src_path}: {e}")
+
+            # 3. Finalize
+            if saved_paths:
+                # Add initial entry to DB
+                if database.get_student_by_id(student_id):
+                    messagebox.showinfo("Updated", f"Added new photos for existing student {data['name']}.")
                 else:
-                    messagebox.showerror("Error", "Failed to register student. Please ensure face is visible.")
+                    database.add_student(
+                        student_id=student_id,
+                        name=data['name'],
+                        department=data['dept'],
+                        year=data['year'],
+                        face_embedding=None, # Trainer will fill this
+                        face_image_path=saved_paths[0]
+                    )
+                
+                self.refresh_students()
+                messagebox.showinfo("Success", 
+                                  f"Saved {len(saved_paths)} photos.\n\n"
+                                  "⚠️ CRITICAL: You must click 'Train System' now to update recognition!")
             else:
-                messagebox.showerror("Error", "No camera frame available!")
+                messagebox.showerror("Error", "No valid images saved.")
+
+    def run_training(self):
+        """Run the training script in background"""
+        def training_thread():
+            self.train_btn.config(state="disabled", text="Training...", bg="gray")
+            self.root.title("⚠️ Training System... (This may take a moment)")
+            try:
+                train_model.train_system()
+                # Reload the recognition system's cache
+                if self.face_system:
+                    self.face_system.reload_known_faces()
+                
+                self.root.after(0, lambda: messagebox.showinfo("Success", "System Trained Successfully! Recognition updated."))
+            except Exception as e:
+                self.root.after(0, lambda: messagebox.showerror("Error", f"Training Failed: {e}"))
+            finally:
+                self.root.after(0, lambda: self.train_btn.config(state="normal", text="🔄 Train System", bg="#e67e22"))
+                self.root.after(0, lambda: self.root.title(getattr(config, 'WINDOW_TITLE', "College Canteen System")))
         
-        ttk.Button(dialog, text="📷 Capture & Register", command=do_register).pack(pady=20)
-    
-    def add_student_dialog(self):
-        """Add student from file"""
-        messagebox.showinfo("Info", "Please use 'Register Face' button in Live Detection tab to add new students with face capture.")
-    
+        threading.Thread(target=training_thread, daemon=True).start()
+
+    # --- MANAGEMENT FUNCTIONS ---
+
     def refresh_students(self):
-        """Refresh students table"""
-        # Clear existing
         for item in self.students_tree.get_children():
             self.students_tree.delete(item)
         
-        # Load students
         students = database.get_all_students()
-        
-        for student in students:
-            created = student.get('created_at', 'N/A')
-            if created and len(created) > 10:
-                created = created[:10]
+        for s in students:
+            created = s.get('created_at', 'N/A')
+            if created and len(created) > 10: created = created[:10]
             
             self.students_tree.insert('', tk.END, values=(
-                student['id'],
-                student['student_id'],
-                student['name'],
-                student.get('department', 'N/A'),
-                student.get('year', 'N/A'),
-                created
+                s['id'], s['student_id'], s['name'], 
+                s.get('department',''), s.get('year',''), created
             ))
-    
+
     def filter_students(self):
-        """Filter students by search term"""
         search = self.student_search_var.get().lower()
-        
         for item in self.students_tree.get_children():
             self.students_tree.delete(item)
-        
-        students = database.get_all_students()
-        
-        for student in students:
-            if (search in student['student_id'].lower() or 
-                search in student['name'].lower() or
-                search in (student.get('department', '') or '').lower()):
-                
-                created = student.get('created_at', 'N/A')
-                if created and len(created) > 10:
-                    created = created[:10]
-                
+            
+        all_s = database.get_all_students()
+        for s in all_s:
+            if search in s['name'].lower() or search in s['student_id'].lower():
+                created = s.get('created_at', 'N/A')
+                if created and len(created) > 10: created = created[:10]
                 self.students_tree.insert('', tk.END, values=(
-                    student['id'],
-                    student['student_id'],
-                    student['name'],
-                    student.get('department', 'N/A'),
-                    student.get('year', 'N/A'),
-                    created
+                    s['id'], s['student_id'], s['name'], 
+                    s.get('department',''), s.get('year',''), created
                 ))
-    
+
     def delete_student(self):
-        """Delete selected student"""
         selected = self.students_tree.selection()
         if not selected:
-            messagebox.showwarning("Warning", "Please select a student to delete!")
+            messagebox.showwarning("Warning", "Select a student to delete")
             return
         
         item = self.students_tree.item(selected[0])
         student_id = item['values'][1]
         name = item['values'][2]
         
-        if messagebox.askyesno("Confirm", f"Delete student {name} ({student_id})?"):
+        if messagebox.askyesno("Confirm", f"Delete {name} ({student_id})?"):
             database.delete_student(student_id)
-            if self.face_system:
-                self.face_system.reload_known_faces()
             self.refresh_students()
-            messagebox.showinfo("Success", "Student deleted successfully!")
-    
+            if self.face_system: self.face_system.reload_known_faces()
+            messagebox.showinfo("Deleted", "Student removed.")
+
     def refresh_logs(self):
-        """Refresh logs table"""
-        # Clear existing
         for item in self.logs_tree.get_children():
             self.logs_tree.delete(item)
-        
-        # Get filters
-        date = self.log_date_var.get().strip() or None
-        student_id = self.log_student_var.get().strip() or None
-        
-        # Load logs
-        logs = database.get_visit_logs(date=date, student_id=student_id)
-        
-        for log in logs:
-            entry_time = log.get('entry_time', 'N/A')
-            if entry_time and len(entry_time) > 19:
-                entry_time = entry_time[:19]
             
-            status = "Known" if log.get('is_known') else "Unknown"
-            duration = log.get('duration_minutes', '-')
-            if duration and duration != '-':
-                duration = f"{duration} min"
+        date = self.log_date_var.get().strip() or None
+        sid = self.log_student_var.get().strip() or None
+        
+        logs = database.get_visit_logs(date=date, student_id=sid)
+        for log in logs:
+            status = "Known" if log['is_known'] else "Unknown"
+            duration = f"{log.get('duration_minutes','-')} min"
+            t = log['entry_time']
+            if t and ' ' in t: t = t.split(' ')[1][:8]
             
             self.logs_tree.insert('', tk.END, values=(
-                log['id'],
-                log.get('date', 'N/A'),
-                entry_time,
-                log.get('student_id', 'Unknown'),
-                log.get('student_name', 'Unknown'),
-                status,
-                duration
+                log['id'], log.get('date',''), t, 
+                log.get('student_id',''), log.get('student_name',''), status, duration
             ))
-    
-    def clear_log_filters(self):
-        """Clear log filters"""
-        self.log_date_var.set(datetime.now().strftime('%Y-%m-%d'))
-        self.log_student_var.set('')
-        self.refresh_logs()
-    
+
     def export_logs(self):
-        """Export logs to CSV"""
-        filepath = filedialog.asksaveasfilename(
-            defaultextension=".csv",
-            filetypes=[("CSV files", "*.csv")],
-            initialfile=f"canteen_logs_{datetime.now().strftime('%Y%m%d')}.csv"
-        )
-        
+        if export_logs_to_csv is None:
+            messagebox.showerror("Error", "Utils module missing or incomplete.")
+            return
+
+        filepath = filedialog.asksaveasfilename(defaultextension=".csv", filetypes=[("CSV","*.csv")])
         if filepath:
-            date = self.log_date_var.get().strip() or None
-            student_id = self.log_student_var.get().strip() or None
-            logs = database.get_visit_logs(date=date, student_id=student_id)
-            
-            with open(filepath, 'w') as f:
-                f.write("ID,Date,Entry Time,Student ID,Name,Status,Duration\n")
-                for log in logs:
-                    status = "Known" if log.get('is_known') else "Unknown"
-                    f.write(f"{log['id']},{log.get('date', '')},{log.get('entry_time', '')},"
-                           f"{log.get('student_id', '')},{log.get('student_name', '')},"
-                           f"{status},{log.get('duration_minutes', '')}\n")
-            
-            messagebox.showinfo("Success", f"Logs exported to {filepath}")
-    
+            try:
+                export_logs_to_csv(filepath, self.log_date_var.get().strip(), self.log_student_var.get().strip())
+                messagebox.showinfo("Exported", f"Saved to {filepath}")
+            except Exception as e:
+                messagebox.showerror("Error", str(e))
+
     def refresh_statistics(self):
-        """Refresh statistics"""
         stats = database.get_daily_statistics()
         students = database.get_all_students()
         
@@ -669,63 +682,33 @@ class CanteenFaceDetectionGUI:
         self.stat_unique.config(text=str(stats['unique_visitors']))
         self.stat_unknown.config(text=str(stats['unknown_visitors']))
         
-        # Update detailed stats
         self.stats_text.delete(1.0, tk.END)
-        
-        stats_report = f"""
-╔════════════════════════════════════════════════════════════╗
-║           CANTEEN FACE DETECTION - STATISTICS REPORT       ║
-╠════════════════════════════════════════════════════════════╣
-║  Report Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S'):<39}║
-╠════════════════════════════════════════════════════════════╣
-║  TODAY'S SUMMARY ({stats['date']})                          ║
-╠════════════════════════════════════════════════════════════╣
-║  • Total Visits:        {stats['total_visits']:<35}║
-║  • Unique Visitors:     {stats['unique_visitors']:<35}║
-║  • Unknown Visitors:    {stats['unknown_visitors']:<35}║
-║  • Avg Duration:        {stats['average_duration_minutes']:<35}min ║
-╠════════════════════════════════════════════════════════════╣
-║  REGISTERED STUDENTS                                       ║
-╠════════════════════════════════════════════════════════════╣
-║  • Total Registered:    {len(students):<35}║
-╚════════════════════════════════════════════════════════════╝
-"""
-        self.stats_text.insert(tk.END, stats_report)
-        
-        # Update today's summary in detection tab
-        self.today_visits_label.config(text=f"Total Visits: {stats['total_visits']}")
-        self.today_unique_label.config(text=f"Unique Visitors: {stats['unique_visitors']}")
-    
+        self.stats_text.insert(tk.END, f"Report Generated: {datetime.now()}\n\n")
+        self.stats_text.insert(tk.END, f"Total Visits Today: {stats['total_visits']}\n")
+        self.stats_text.insert(tk.END, f"Unique Visitors: {stats['unique_visitors']}\n")
+        self.stats_text.insert(tk.END, f"Avg Duration: {stats['average_duration_minutes']} min\n")
+
     def refresh_all_data(self):
-        """Refresh all data in all tabs"""
         self.refresh_students()
         self.refresh_logs()
         self.refresh_statistics()
-    
+
     def take_screenshot(self):
-        """Take a screenshot of current frame"""
-        if self.current_frame is None:
-            messagebox.showwarning("Warning", "No frame to capture!")
-            return
-        
-        screenshots_dir = os.path.join(os.path.dirname(__file__), "screenshots")
-        os.makedirs(screenshots_dir, exist_ok=True)
-        
-        filename = f"screenshot_{datetime.now().strftime('%Y%m%d_%H%M%S')}.jpg"
-        filepath = os.path.join(screenshots_dir, filename)
-        
-        cv2.imwrite(filepath, self.current_frame)
-        messagebox.showinfo("Success", f"Screenshot saved: {filename}")
-    
+        if self.current_frame is not None:
+            ts = datetime.now().strftime('%Y%m%d_%H%M%S')
+            path = os.path.join(config.SCREENSHOTS_DIR, f"manual_{ts}.jpg")
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+            cv2.imwrite(path, self.current_frame)
+            messagebox.showinfo("Saved", f"Screenshot saved to {path}")
+
     def on_closing(self):
-        """Handle window close"""
         self.is_running = False
-        if self.cap:
-            self.cap.release()
+        if self.cap: self.cap.release()
+        if self.face_system: self.face_system.stop()
         self.root.destroy()
-    
+        sys.exit(0)
+
     def run(self):
-        """Run the application"""
         self.root.mainloop()
 
 def main():

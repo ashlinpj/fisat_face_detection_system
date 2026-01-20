@@ -5,20 +5,22 @@
 opencv-python>=4.8.0
 numpy>=1.24.0
 Pillow>=10.0.0
+pandas>=2.0.0          # Required by DeepFace for data handling
 
-# YOLO - Ultralytics (Latest YOLOv8)
+# YOLO - Ultralytics (Latest YOLOv8 for Detection)
 ultralytics>=8.1.0
 
-# Face Recognition
+# Face Recognition (DeepFace for Identification)
 deepface>=0.0.79
 tensorflow>=2.13.0
+tf-keras>=2.15.0       # Required for newer TensorFlow versions
+
+# Data Augmentation (Crucial for fixing accuracy issues)
+torch>=2.0.0           # Required for the augmentation script
+torchvision>=0.15.0    # Required for image transforms (blur/rotate)
 
 # GUI
-tk>=0.1.0
+tk>=0.1.0              # Usually built-in, but good to ensure
 
-# Database (built-in with Python, just for reference)
-# sqlite3 - included in Python standard library
-
-# Optional - for better performance
-# onnxruntime>=1.16.0  # For faster inference
-# opencv-contrib-python>=4.8.0  # For additional OpenCV features
+# Optional - for performance
+# onnxruntime>=1.16.0

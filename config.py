@@ -1,38 +1,35 @@
-# Configuration file for Face Detection System
-
 import os
 
-# Base directory
+# --- PATH SETTINGS ---
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+DB_FOLDER = os.path.join(BASE_DIR, "database")
 
-# Database settings
-DATABASE_PATH = os.path.join(BASE_DIR, "database", "canteen.db")
-FACES_DIR = os.path.join(BASE_DIR, "database", "faces")
-# Directory for visit screenshots
-SCREENSHOTS_DIR = os.path.join(BASE_DIR, "screenshots")
+# Create folders if they don't exist
+if not os.path.exists(DB_FOLDER):
+    os.makedirs(DB_FOLDER)
 
-# YOLO Model settings
-YOLO_MODEL = "yolov8n.pt"  # General model, works well
-CONFIDENCE_THRESHOLD = 0.4
+DATABASE_PATH = os.path.join(DB_FOLDER, "canteen.db")
+FACES_DIR = os.path.join(DB_FOLDER, "faces")
+SCREENSHOTS_DIR = os.path.join(DB_FOLDER, "screenshots")
 
-# Face Recognition settings - LOWERED for better matching with older photos
-FACE_RECOGNITION_THRESHOLD = 0.35  # Lower = more lenient matching (was 0.6)
-FACE_EMBEDDING_MODEL = "Facenet"  # Facenet is faster and good for variations
+# Create subfolders
+for folder in [FACES_DIR, SCREENSHOTS_DIR]:
+    if not os.path.exists(folder):
+        os.makedirs(folder)
 
-# Performance settings - OPTIMIZED FOR SPEED
-PROCESS_EVERY_N_FRAMES = 11 # Only recognize every 5 frames (much faster)
-DETECTION_SCALE = 0.7  # Lower scale = faster detection
-USE_GPU = True  # Enable GPU acceleration
-USE_THREADED_RECOGNITION = True  # Run recognition in background thread
+# --- APPLICATION SETTINGS ---
+WINDOW_TITLE = "College Canteen Face Detection System"  # <--- This was missing
+CAMERA_INDEX = 0  # 0 for webcam, 1 or 2 for external USB cameras
+FRAME_WIDTH = 1280
+FRAME_HEIGHT = 720
 
-# Camera settings
-CAMERA_INDEX =0 # Default camera (change if you have multiple cameras)
-FRAME_WIDTH = 640  # Lower resolution = faster processing
-FRAME_HEIGHT = 480
-FPS = 60
+# --- AI & DETECTION SETTINGS ---
+CONFIDENCE_THRESHOLD = 0.5    # YOLO Detection confidence (0.0 to 1.0)
+FACE_RECOGNITION_THRESHOLD = 0.35  # Lower = Stricter matching (0.35 is good for Facenet512)
+FACE_EMBEDDING_MODEL = "Facenet512" 
+DETECTION_SCALE = 0.5  # Scale down frame for faster detection (0.5 = 50% size)
 
-# UI settings
-WINDOW_TITLE = "College Canteen Face Detection System"
-
-# Time settings
-MIN_TIME_BETWEEN_LOGS = 30  # Minimum seconds between logging same person
+# --- SYSTEM SETTINGS ---
+LOG_COOLDOWN = 60             # Seconds to wait before logging the same person again
+USE_GPU = True                # Tries to use GPU if available
+USE_THREADED_RECOGNITION = True

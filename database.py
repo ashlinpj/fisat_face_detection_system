@@ -1,6 +1,7 @@
 """
 Database module for Face Detection System
 Handles all database operations including student records and visit logs
+FIXED: Handles NoneType embeddings for registration without training
 """
 
 import sqlite3
@@ -13,7 +14,10 @@ import config
 
 def ensure_directories():
     """Create necessary directories if they don't exist"""
-    os.makedirs(os.path.dirname(config.DATABASE_PATH), exist_ok=True)
+    # Use dirname if it's a file path, otherwise use as is
+    db_dir = os.path.dirname(config.DATABASE_PATH)
+    if db_dir:
+        os.makedirs(db_dir, exist_ok=True)
     os.makedirs(config.FACES_DIR, exist_ok=True)
 
 def get_connection():
@@ -28,7 +32,7 @@ def init_database():
     conn = get_connection()
     cursor = conn.cursor()
     
-    # Students table - stores student information and face embeddings
+    # Students table
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS students (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -43,7 +47,7 @@ def init_database():
         )
     ''')
     
-    # Visit logs table - tracks canteen visits
+    # Visit logs table
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS visit_logs (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -57,34 +61,24 @@ def init_database():
             is_known INTEGER DEFAULT 1,
             screenshot_path TEXT,
             FOREIGN KEY (student_db_id) REFERENCES students(id)
-        )
-    ''')
-    
-    # Unknown faces table - stores unrecognized faces for later registration
-    cursor.execute('''
-        CREATE TABLE IF NOT EXISTS unknown_faces (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            face_image_path TEXT,
-            face_embedding TEXT,
-            first_seen TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            last_seen TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            times_seen INTEGER DEFAULT 1
-        )
+        )   
     ''')
     
     conn.commit()
     conn.close()
-    print("Database initialized successfully!")
 
 def add_student(student_id: str, name: str, department: str, year: int, 
-                face_embedding: np.ndarray, face_image_path: str) -> bool:
+                face_embedding: Optional[np.ndarray], face_image_path: str) -> bool:
     """Add a new student to the database"""
     try:
         conn = get_connection()
         cursor = conn.cursor()
         
-        # Convert embedding to JSON string for storage
-        embedding_json = json.dumps(face_embedding.tolist())
+        # FIX: Handle None embedding safely
+        if face_embedding is not None:
+            embedding_json = json.dumps(face_embedding.tolist())
+        else:
+            embedding_json = None
         
         cursor.execute('''
             INSERT INTO students (student_id, name, department, year, face_embedding, face_image_path)
@@ -113,8 +107,15 @@ def get_all_students() -> List[dict]:
     students = []
     for row in rows:
         student = dict(row)
+        # Parse JSON embedding back to numpy array if it exists
         if student['face_embedding']:
-            student['face_embedding'] = np.array(json.loads(student['face_embedding']))
+            try:
+                student['face_embedding'] = np.array(json.loads(student['face_embedding']))
+            except:
+                student['face_embedding'] = None
+        else:
+            student['face_embedding'] = None
+            
         students.append(student)
     
     conn.close()
@@ -127,13 +128,17 @@ def get_student_by_id(student_id: str) -> Optional[dict]:
     
     cursor.execute('SELECT * FROM students WHERE student_id = ?', (student_id,))
     row = cursor.fetchone()
-    
     conn.close()
     
     if row:
         student = dict(row)
         if student['face_embedding']:
-            student['face_embedding'] = np.array(json.loads(student['face_embedding']))
+            try:
+                student['face_embedding'] = np.array(json.loads(student['face_embedding']))
+            except:
+                student['face_embedding'] = None
+        else:
+            student['face_embedding'] = None
         return student
     return None
 
@@ -184,9 +189,7 @@ def delete_student(student_id: str) -> bool:
     try:
         conn = get_connection()
         cursor = conn.cursor()
-        
         cursor.execute('DELETE FROM students WHERE student_id = ?', (student_id,))
-        
         conn.commit()
         conn.close()
         return True
@@ -195,7 +198,7 @@ def delete_student(student_id: str) -> bool:
         return False
 
 def log_visit(student_db_id: int, student_id: str, student_name: str, screenshot_path: str = None, is_known: bool = True) -> int:
-    """Log a canteen visit with screenshot"""
+    """Log a canteen visit"""
     try:
         conn = get_connection()
         cursor = conn.cursor()
@@ -211,24 +214,6 @@ def log_visit(student_db_id: int, student_id: str, student_name: str, screenshot
         print(f"Error logging visit: {e}")
         return -1
 
-def update_visit_exit(log_id: int):
-    """Update visit log with exit time"""
-    try:
-        conn = get_connection()
-        cursor = conn.cursor()
-        
-        cursor.execute('''
-            UPDATE visit_logs 
-            SET exit_time = CURRENT_TIMESTAMP,
-                duration_minutes = CAST((JULIANDAY(CURRENT_TIMESTAMP) - JULIANDAY(entry_time)) * 24 * 60 AS INTEGER)
-            WHERE id = ?
-        ''', (log_id,))
-        
-        conn.commit()
-        conn.close()
-    except Exception as e:
-        print(f"Error updating visit exit: {e}")
-
 def get_visit_logs(date: str = None, student_id: str = None) -> List[dict]:
     """Get visit logs with optional filters"""
     conn = get_connection()
@@ -241,8 +226,8 @@ def get_visit_logs(date: str = None, student_id: str = None) -> List[dict]:
         query += ' AND date = ?'
         params.append(date)
     if student_id:
-        query += ' AND student_id = ?'
-        params.append(student_id)
+        query += ' AND student_id LIKE ?'
+        params.append(f"%{student_id}%")
     
     query += ' ORDER BY entry_time DESC'
     
@@ -252,62 +237,6 @@ def get_visit_logs(date: str = None, student_id: str = None) -> List[dict]:
     logs = [dict(row) for row in rows]
     conn.close()
     return logs
-
-def get_recent_visit(student_id: str) -> Optional[dict]:
-    """Get the most recent visit for a student"""
-    conn = get_connection()
-    cursor = conn.cursor()
-    
-    cursor.execute('''
-        SELECT * FROM visit_logs 
-        WHERE student_id = ? 
-        ORDER BY entry_time DESC 
-        LIMIT 1
-    ''', (student_id,))
-    
-    row = cursor.fetchone()
-    conn.close()
-    
-    return dict(row) if row else None
-
-def add_unknown_face(face_image_path: str, face_embedding: np.ndarray) -> int:
-    """Add unknown face for later registration"""
-    try:
-        conn = get_connection()
-        cursor = conn.cursor()
-        
-        embedding_json = json.dumps(face_embedding.tolist())
-        
-        cursor.execute('''
-            INSERT INTO unknown_faces (face_image_path, face_embedding)
-            VALUES (?, ?)
-        ''', (face_image_path, embedding_json))
-        
-        face_id = cursor.lastrowid
-        conn.commit()
-        conn.close()
-        return face_id
-    except Exception as e:
-        print(f"Error adding unknown face: {e}")
-        return -1
-
-def get_unknown_faces() -> List[dict]:
-    """Get all unknown faces"""
-    conn = get_connection()
-    cursor = conn.cursor()
-    
-    cursor.execute('SELECT * FROM unknown_faces ORDER BY last_seen DESC')
-    rows = cursor.fetchall()
-    
-    faces = []
-    for row in rows:
-        face = dict(row)
-        if face['face_embedding']:
-            face['face_embedding'] = np.array(json.loads(face['face_embedding']))
-        faces.append(face)
-    
-    conn.close()
-    return faces
 
 def get_daily_statistics(date: str = None) -> dict:
     """Get daily visit statistics"""
@@ -343,6 +272,6 @@ def get_daily_statistics(date: str = None) -> dict:
         'average_duration_minutes': round(avg_duration, 2)
     }
 
-# Initialize database when module is imported
 if __name__ == "__main__":
     init_database()
+    
