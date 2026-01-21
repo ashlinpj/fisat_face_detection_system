@@ -19,11 +19,13 @@ CONFIDENCE_THRESHOLD = 0.4
 FACE_RECOGNITION_THRESHOLD = 0.35  # Lower = more lenient matching (was 0.6)
 FACE_EMBEDDING_MODEL = "Facenet"  # Facenet is faster and good for variations
 
-# Performance settings - OPTIMIZED FOR SPEED
-PROCESS_EVERY_N_FRAMES = 11 # Only recognize every 5 frames (much faster)
-DETECTION_SCALE = 0.7  # Lower scale = faster detection
+# Performance settings - GPU OPTIMIZED
+PROCESS_EVERY_N_FRAMES = 5  # Faster processing with GPU
+DETECTION_SCALE = 1.0  # Full resolution with GPU acceleration
 USE_GPU = True  # Enable GPU acceleration
 USE_THREADED_RECOGNITION = True  # Run recognition in background thread
+USE_DNN_DETECTOR = True  # Use GPU-accelerated DNN face detector
+DNN_CONFIDENCE_THRESHOLD = 0.6  # Confidence threshold for DNN detector
 
 # Camera settings
 CAMERA_INDEX =0 # Default camera (change if you have multiple cameras)

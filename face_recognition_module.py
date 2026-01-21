@@ -1,20 +1,36 @@
 """
 Face Recognition Module - ULTRA OPTIMIZED VERSION
-Threading + Caching + Image Upload Support
+Threading + Caching + Image Upload Support + GPU Acceleration
 """
 
+import os
 import cv2
 from skimage import exposure
 from PIL import Image, ImageEnhance
 import numpy as np
-import os
 from datetime import datetime
 from typing import List, Tuple, Optional
-from deepface import DeepFace
 import threading
 import queue
 import config
 import database
+
+# Configure GPU for TensorFlow/Keras (used by DeepFace)
+try:
+    os.environ['TF_FORCE_GPU_ALLOW_GROWTH'] = 'true'
+    os.environ['CUDA_VISIBLE_DEVICES'] = '0'
+    import tensorflow as tf
+    
+    # Enable GPU memory growth
+    physical_devices = tf.config.list_physical_devices('GPU')
+    if physical_devices:
+        for device in physical_devices:
+            tf.config.experimental.set_memory_growth(device, True)
+        print(f"✓ TensorFlow GPU configured: {len(physical_devices)} device(s)")
+except Exception as e:
+    pass
+
+from deepface import DeepFace
 
 # Check for GPU availability
 def check_gpu():
@@ -22,13 +38,26 @@ def check_gpu():
     gpu_available = False
     gpu_name = "CPU"
     
+    # Check PyTorch CUDA
     try:
         import torch
         if torch.cuda.is_available():
             gpu_available = True
             gpu_name = torch.cuda.get_device_name(0)
-            print(f"✓ GPU Detected: {gpu_name}")
+            print(f"✓ PyTorch GPU Detected: {gpu_name}")
             print(f"  CUDA Version: {torch.version.cuda}")
+    except:
+        pass
+    
+    # Check TensorFlow GPU (used by DeepFace)
+    try:
+        import tensorflow as tf
+        gpus = tf.config.list_physical_devices('GPU')
+        if gpus:
+            gpu_available = True
+            print(f"✓ TensorFlow GPU: {len(gpus)} device(s) available")
+            for gpu in gpus:
+                print(f"  {gpu.name}")
     except:
         pass
     
@@ -40,6 +69,10 @@ def check_gpu():
     except:
         pass
     
+    if not gpu_available:
+        print("⚠ No GPU detected - running on CPU mode")
+        print("  To enable GPU: Install tensorflow-gpu or torch with CUDA support")
+    
     return gpu_available, gpu_name
 
 
@@ -48,6 +81,9 @@ class FaceRecognitionSystem:
         self.known_faces = []
         self.active_visits = {}
         self.last_seen = {}
+        
+        # Store current frame's recognized faces for display
+        self.current_recognized_faces = {}  # bbox -> {name, confidence, timestamp}
         
         # Performance optimization
         self.frame_count = 0
@@ -162,9 +198,42 @@ class FaceRecognitionSystem:
     def _load_dnn_detector(self):
         """Load OpenCV DNN face detector (GPU accelerated)"""
         try:
-            print("✓ Face detector ready")
+            # Load pre-trained face detection model
+            model_file = "res10_300x300_ssd_iter_140000.caffemodel"
+            config_file = "deploy.prototxt"
+            
+            # Try to load from OpenCV samples or local directory
+            import urllib.request
+            base_url = "https://raw.githubusercontent.com/opencv/opencv_3rdparty/dnn_samples_face_detector_20170830/"
+            
+            # Download models if not present
+            if not os.path.exists(model_file):
+                print("Downloading DNN face detector model...")
+                urllib.request.urlretrieve(base_url + model_file, model_file)
+            
+            if not os.path.exists(config_file):
+                prototxt_url = "https://raw.githubusercontent.com/opencv/opencv/master/samples/dnn/face_detector/deploy.prototxt"
+                urllib.request.urlretrieve(prototxt_url, config_file)
+            
+            self.dnn_net = cv2.dnn.readNetFromCaffe(config_file, model_file)
+            
+            # Enable GPU if available
+            if self.use_gpu:
+                try:
+                    self.dnn_net.setPreferableBackend(cv2.dnn.DNN_BACKEND_CUDA)
+                    self.dnn_net.setPreferableTarget(cv2.dnn.DNN_TARGET_CUDA)
+                    print("✓ DNN face detector loaded on GPU")
+                except:
+                    self.dnn_net.setPreferableBackend(cv2.dnn.DNN_BACKEND_OPENCV)
+                    self.dnn_net.setPreferableTarget(cv2.dnn.DNN_TARGET_CPU)
+                    print("✓ DNN face detector loaded on CPU")
+            else:
+                self.dnn_net.setPreferableBackend(cv2.dnn.DNN_BACKEND_OPENCV)
+                self.dnn_net.setPreferableTarget(cv2.dnn.DNN_TARGET_CPU)
+                print("✓ DNN face detector loaded on CPU")
         except Exception as e:
-            print(f"  DNN detector failed: {e}")
+            print(f"  DNN detector load failed: {e}")
+            self.dnn_net = None
     
     def _load_known_faces(self):
         """Load all known faces from database"""
@@ -313,11 +382,55 @@ class FaceRecognitionSystem:
     def detect_faces(self, frame: np.ndarray) -> List[Tuple[int, int, int, int]]:
         """
         Face detection - returns SQUARE bounding boxes
-        Uses Haar Cascade (fast) - YOLO for person detection optional
+        Uses DNN (GPU accelerated) or Haar Cascade fallback
         """
         h, w = frame.shape[:2]
+        result = []
         
-        # Fast Haar Cascade detection (most reliable for faces)
+        # Try GPU-accelerated DNN detector first
+        use_dnn = getattr(config, 'USE_DNN_DETECTOR', False)
+        if use_dnn and self.dnn_net is not None:
+            try:
+                # Prepare blob for DNN
+                blob = cv2.dnn.blobFromImage(frame, 1.0, (300, 300), (104.0, 177.0, 123.0))
+                self.dnn_net.setInput(blob)
+                detections = self.dnn_net.forward()
+                
+                # Process detections
+                confidence_threshold = getattr(config, 'DNN_CONFIDENCE_THRESHOLD', 0.6)
+                for i in range(detections.shape[2]):
+                    confidence = detections[0, 0, i, 2]
+                    if confidence > confidence_threshold:
+                        box = detections[0, 0, i, 3:7] * np.array([w, h, w, h])
+                        x1, y1, x2, y2 = box.astype(int)
+                        
+                        # Make SQUARE bounding box
+                        width = x2 - x1
+                        height = y2 - y1
+                        size = max(width, height)
+                        center_x = x1 + width // 2
+                        center_y = y1 + height // 2
+                        
+                        x1_sq = center_x - size // 2
+                        y1_sq = center_y - size // 2
+                        x2_sq = x1_sq + size
+                        y2_sq = y1_sq + size
+                        
+                        # Ensure within frame bounds
+                        x1_sq = max(0, x1_sq)
+                        y1_sq = max(0, y1_sq)
+                        x2_sq = min(w, x2_sq)
+                        y2_sq = min(h, y2_sq)
+                        
+                        result.append((x1_sq, y1_sq, x2_sq, y2_sq))
+                
+                if result:  # If DNN found faces, return them
+                    return result
+            except Exception as e:
+                # Fall through to Haar Cascade
+                pass
+        
+        # Fallback: Fast Haar Cascade detection
         scale = getattr(config, 'DETECTION_SCALE', 0.5)
         small_frame = cv2.resize(frame, None, fx=scale, fy=scale)
         gray = cv2.cvtColor(small_frame, cv2.COLOR_BGR2GRAY)
@@ -330,7 +443,6 @@ class FaceRecognitionSystem:
             flags=cv2.CASCADE_SCALE_IMAGE
         )
         
-        result = []
         for (x, y, fw, fh) in faces:
             # Scale back to original size
             x1 = int(x / scale)
@@ -452,6 +564,14 @@ class FaceRecognitionSystem:
         current_time = datetime.now()
         h, w = frame.shape[:2]
         
+        # Clean up old recognized faces (older than 10 seconds)
+        expired_bboxes = []
+        for bbox, info in self.current_recognized_faces.items():
+            if (current_time - info['timestamp']).total_seconds() > 10:
+                expired_bboxes.append(bbox)
+        for bbox in expired_bboxes:
+            del self.current_recognized_faces[bbox]
+        
         # STEP 1: Always detect faces (fast)
         faces = self.detect_faces(frame)
         
@@ -488,7 +608,31 @@ class FaceRecognitionSystem:
             confidence = result['confidence']
             timestamp = result['timestamp']
             face_crop = result['face_crop']
+            bbox = result.get('bbox', None)
             
+            # Store recognition result for display (with confidence threshold of 0.55)
+            display_threshold = 0.35
+            if bbox:
+                if student and confidence > display_threshold:
+                    # High confidence - show name
+                    self.current_recognized_faces[bbox] = {
+                        'name': student['name'],
+                        'student_id': student['student_id'],
+                        'confidence': confidence,
+                        'timestamp': current_time,
+                        'is_known': True
+                    }
+                else:
+                    # Low confidence or no match - mark as unknown
+                    self.current_recognized_faces[bbox] = {
+                        'name': 'Unknown',
+                        'student_id': None,
+                        'confidence': confidence,
+                        'timestamp': current_time,
+                        'is_known': False
+                    }
+            
+            # LOG only if confidence exceeds database threshold AND it's a known person
             if student and confidence > config.FACE_RECOGNITION_THRESHOLD:
                 student_id = student['student_id']
                 
@@ -517,12 +661,54 @@ class FaceRecognitionSystem:
         except queue.Empty:
             pass
         
-        # STEP 4: Draw simple detection boxes
+        # STEP 4: Draw detection boxes with names
         for (x1, y1, x2, y2) in faces:
-            color = (0, 255, 0)
+            # Find matching recognized face (with some tolerance for position changes)
+            name_to_display = "Unknown"  # Default to Unknown instead of Detecting
+            color = (0, 0, 255)  # Red for unknown
+            confidence = 0.0
+            is_known = False
+            
+            # Check if this face matches a recognized face
+            best_match = None
+            min_distance = float('inf')
+            
+            for recognized_bbox, info in self.current_recognized_faces.items():
+                rx1, ry1, rx2, ry2 = recognized_bbox
+                # Calculate center distance
+                center_x, center_y = (x1 + x2) / 2, (y1 + y2) / 2
+                rcenter_x, rcenter_y = (rx1 + rx2) / 2, (ry1 + ry2) / 2
+                distance = ((center_x - rcenter_x) ** 2 + (center_y - rcenter_y) ** 2) ** 0.5
+                
+                # If within reasonable distance (face size), consider it a match
+                face_size = ((x2 - x1) + (y2 - y1)) / 2
+                if distance < face_size * 0.5 and distance < min_distance:
+                    min_distance = distance
+                    best_match = info
+            
+            if best_match:
+                name_to_display = best_match['name']
+                confidence = best_match['confidence']
+                is_known = best_match.get('is_known', False)
+                color = (0, 255, 0) if is_known else (0, 0, 255)  # Green for known, Red for unknown
+            
+            # Draw rectangle
             cv2.rectangle(annotated_frame, (x1, y1), (x2, y2), color, 2)
-            cv2.putText(annotated_frame, "Detecting...", (x1, y1-10),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
+            
+            # Draw name with background for better visibility
+            label = name_to_display
+            if confidence > 0:
+                label += f" ({confidence:.2f})"
+            
+            # Calculate text size and draw background
+            label_size, baseline = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.6, 2)
+            y1_label = max(y1, label_size[1] + 10)
+            cv2.rectangle(annotated_frame, 
+                         (x1, y1_label - label_size[1] - 10), 
+                         (x1 + label_size[0], y1_label), 
+                         color, -1)
+            cv2.putText(annotated_frame, label, (x1, y1_label - 5),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
         
         # Status overlay
         cv2.putText(annotated_frame, current_time.strftime("%H:%M:%S"),
