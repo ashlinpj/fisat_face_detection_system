@@ -498,6 +498,15 @@ class CanteenFaceDetectionGUI:
         year_var = tk.StringVar(value="1")
         year_combo = ttk.Combobox(dialog, textvariable=year_var, values=['1', '2', '3', '4'], width=27)
         year_combo.pack()
+
+        ttk.Label(
+            dialog,
+            text="We will capture ~10 guided poses (angles + glasses) for better training.",
+            wraplength=340
+        ).pack(pady=(8, 4))
+
+        include_glasses = tk.BooleanVar(value=True)
+        ttk.Checkbutton(dialog, text="Include glasses captures (if applicable)", variable=include_glasses).pack()
         
         def do_register():
             student_id = id_entry.get().strip()
@@ -509,21 +518,84 @@ class CanteenFaceDetectionGUI:
                 messagebox.showerror("Error", "Student ID and Name are required!")
                 return
             
-            if self.current_frame is not None:
-                success = self.face_system.register_new_student(
-                    self.current_frame, student_id, name, department, year
+            if not self.cap or not self.cap.isOpened():
+                messagebox.showerror("Error", "Camera is not running. Start detection and try again.")
+                return
+
+            pose_script = self.get_pose_script(include_glasses=include_glasses.get())
+            frames = self.capture_pose_sequence(pose_script)
+
+            if len(frames) < 6:
+                messagebox.showerror(
+                    "Error",
+                    "Could not capture enough samples. Please try again with clear face visibility."
                 )
-                
-                if success:
-                    messagebox.showinfo("Success", f"Student {name} registered successfully!")
-                    dialog.destroy()
-                    self.refresh_students()
-                else:
-                    messagebox.showerror("Error", "Failed to register student. Please ensure face is visible.")
+                return
+
+            success = self.face_system.register_student_from_frames(
+                frames, student_id, name, department, year
+            )
+            
+            if success:
+                messagebox.showinfo("Success", f"Student {name} registered with {len(frames)} samples!")
+                dialog.destroy()
+                self.refresh_students()
             else:
-                messagebox.showerror("Error", "No camera frame available!")
+                messagebox.showerror("Error", "Failed to register student. Please ensure face is visible.")
         
         ttk.Button(dialog, text="📷 Capture & Register", command=do_register).pack(pady=20)
+
+    def get_pose_script(self, include_glasses: bool = True):
+        """Return a guided capture script covering angles and lighting."""
+        script = [
+            ("Front - neutral (no glasses)", "Look straight ahead with a relaxed face."),
+            ("Front - smile", "Smile naturally while facing the camera."),
+            ("Left turn ~30°", "Turn your head slightly left; keep eyes on camera."),
+            ("Right turn ~30°", "Turn your head slightly right; keep eyes on camera."),
+            ("Left profile ~60°", "Turn further left so only part of the face is visible."),
+            ("Right profile ~60°", "Turn further right so only part of the face is visible."),
+            ("Chin slightly down", "Tilt your chin down a bit (as if looking at chest)."),
+            ("Chin slightly up", "Tilt your chin up a bit (as if looking above camera)."),
+            ("Bright light", "Step into brighter light facing the camera."),
+            ("Softer light", "Step slightly aside to introduce mild shadows."),
+        ]
+
+        if include_glasses:
+            script.append(("With glasses - front", "Put on glasses (if any) and face the camera."))
+            script.append(("With glasses - slight angle", "Glasses on; turn 20-30° to either side."))
+
+        return script
+
+    def capture_pose_sequence(self, pose_script):
+        """Guide the user through the pose script and capture frames."""
+        import time
+
+        captured_frames = []
+        total = len(pose_script)
+
+        for idx, (title, tip) in enumerate(pose_script, start=1):
+            prompt = f"Step {idx}/{total}: {title}\n\n{tip}\n\nClick OK when ready to capture."
+            messagebox.showinfo("Capture Pose", prompt)
+
+            # Small delay to let user settle after closing dialog
+            time.sleep(0.4)
+
+            frame = None
+            if self.cap:
+                ret, raw = self.cap.read()
+                if ret:
+                    frame = raw.copy()
+
+            if frame is None and self.current_frame is not None:
+                frame = self.current_frame.copy()
+
+            if frame is None:
+                messagebox.showwarning("Warning", f"Step {idx}: could not capture frame. Skipping.")
+                continue
+
+            captured_frames.append(frame)
+
+        return captured_frames
     
     def add_student_dialog(self):
         """Add student from file"""

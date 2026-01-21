@@ -611,7 +611,7 @@ class FaceRecognitionSystem:
             bbox = result.get('bbox', None)
             
             # Store recognition result for display (with confidence threshold of 0.55)
-            display_threshold = 0.35
+            display_threshold = 0.50
             if bbox:
                 if student and confidence > display_threshold:
                     # High confidence - show name
@@ -724,81 +724,127 @@ class FaceRecognitionSystem:
         database.ensure_directories()
         cv2.imwrite(filepath, face_crop, [cv2.IMWRITE_JPEG_QUALITY, 95])
         return filepath
-    
-    def register_new_student(self, frame: np.ndarray, student_id: str, name: str,
-                            department: str, year: int) -> bool:
-        """
-        Register a new student with improved face capture
-        """
-        print(f"\nRegistering: {name} ({student_id})")
-        
-        # Detect faces
+
+    def _extract_face_sample(self, frame: np.ndarray) -> Tuple[Optional[np.ndarray], Optional[np.ndarray]]:
+        """Detect, crop, enhance, and embed a single face from a frame."""
+        if frame is None:
+            return None, None
+
         faces = self.detect_faces(frame)
-        
+
         # Try DeepFace detection if cascade fails
         if not faces:
             try:
-                detected = DeepFace.extract_faces(frame, detector_backend='opencv',
-                                                   enforce_detection=False)
+                detected = DeepFace.extract_faces(
+                    frame,
+                    detector_backend='opencv',
+                    enforce_detection=False
+                )
                 for d in detected:
-                    if d['confidence'] > 0.5:
+                    if d.get('confidence', 0) > 0.5:
                         fa = d['facial_area']
                         faces.append((fa['x'], fa['y'], fa['x']+fa['w'], fa['y']+fa['h']))
-            except:
+            except Exception:
                 pass
-        
+
         if not faces:
-            print("  ✗ No face detected!")
-            return False
-        
-        if len(faces) > 1:
-            print(f"  ⚠ {len(faces)} faces found, using largest")
-            faces = sorted(faces, key=lambda f: (f[2]-f[0])*(f[3]-f[1]), reverse=True)
-        
+            return None, None
+
+        # Use largest face
+        faces = sorted(faces, key=lambda f: (f[2]-f[0])*(f[3]-f[1]), reverse=True)
         x1, y1, x2, y2 = faces[0]
-        
-        # Add padding for better embedding
+
         h, w = frame.shape[:2]
         pad = int((x2 - x1) * 0.35)
         x1 = max(0, x1 - pad)
         y1 = max(0, y1 - pad)
         x2 = min(w, x2 + pad)
         y2 = min(h, y2 + pad)
-        
+
         face_image = frame[y1:y2, x1:x2]
-        
-        # Get embedding
-        embedding = self.get_face_embedding(face_image)
-        
+        if face_image.size == 0:
+            return None, None
+
+        # Enhance for consistency across lighting/angles
+        face_enhanced = self.enhance_face(face_image)
+        embedding = self.get_face_embedding(face_enhanced)
         if embedding is None:
-            print("  ✗ Could not extract features!")
+            return None, None
+
+        return embedding, face_enhanced
+
+    def register_student_from_frames(self, frames: List[np.ndarray], student_id: str, name: str,
+                                     department: str, year: int) -> bool:
+        """Register a student using multiple frames (averages embeddings)."""
+        print(f"\nRegistering: {name} ({student_id}) with {len(frames)} sample(s)")
+
+        if not frames:
+            print("  ✗ No frames provided for registration")
             return False
-        
-        # Save face image
+
+        embeddings = []
+        saved_paths = []
+
         database.ensure_directories()
-        face_filename = f"{student_id}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.jpg"
-        face_path = os.path.join(config.FACES_DIR, face_filename)
-        cv2.imwrite(face_path, face_image)
-        
-        # Check if updating or adding
+        student_dir = os.path.join(config.FACES_DIR, student_id)
+        os.makedirs(student_dir, exist_ok=True)
+
+        for idx, frame in enumerate(frames, start=1):
+            embedding, face_image = self._extract_face_sample(frame)
+            if embedding is None or face_image is None:
+                print(f"  ✗ Sample {idx}: face/embedding not usable")
+                continue
+
+            embeddings.append(embedding)
+            face_filename = f"{student_id}_{datetime.now().strftime('%Y%m%d_%H%M%S')}_s{idx}.jpg"
+            face_path = os.path.join(student_dir, face_filename)
+            cv2.imwrite(face_path, face_image, [cv2.IMWRITE_JPEG_QUALITY, 95])
+            saved_paths.append(face_path)
+            print(f"  ✓ Captured sample {idx} -> {face_filename}")
+
+        if not embeddings:
+            print("  ✗ No valid samples captured. Registration aborted.")
+            return False
+
+        # Average embeddings for robustness
+        final_embedding = np.mean(np.stack(embeddings), axis=0)
+        norm = np.linalg.norm(final_embedding)
+        if norm > 0:
+            final_embedding = final_embedding / norm
+
+        primary_image_path = saved_paths[0] if saved_paths else None
+
         existing = database.get_student_by_id(student_id)
         if existing:
             success = database.update_student(
-                student_id=student_id, name=name, department=department,
-                year=year, face_embedding=embedding, face_image_path=face_path
+                student_id=student_id,
+                name=name,
+                department=department,
+                year=year,
+                face_embedding=final_embedding,
+                face_image_path=primary_image_path
             )
-            print(f"  ✓ Updated: {name}")
+            print(f"  ✓ Updated: {name} with {len(embeddings)} samples")
         else:
             success = database.add_student(
-                student_id=student_id, name=name, department=department,
-                year=year, face_embedding=embedding, face_image_path=face_path
+                student_id=student_id,
+                name=name,
+                department=department,
+                year=year,
+                face_embedding=final_embedding,
+                face_image_path=primary_image_path
             )
-            print(f"  ✓ Added: {name}")
-        
+            print(f"  ✓ Added: {name} with {len(embeddings)} samples")
+
         if success:
             self.reload_known_faces()
-        
+
         return success
+    
+    def register_new_student(self, frame: np.ndarray, student_id: str, name: str,
+                            department: str, year: int) -> bool:
+        """Backward-compatible single-frame registration wrapper."""
+        return self.register_student_from_frames([frame], student_id, name, department, year)
 
 
 def main():
