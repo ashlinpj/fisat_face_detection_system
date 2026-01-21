@@ -52,6 +52,11 @@ class FaceRecognitionSystem:
         self.cached_results = []
         self.last_recognition_time = 0
         
+        # Multi-frame verification for high accuracy
+        self.face_tracking = {}  # Track faces across frames: {face_id: {'name': str, 'count': int, 'scores': []}}
+        self.verification_frames = 3  # Require consistent detection across 3 frames (FASTER)
+        self.next_face_id = 0
+        
         # Threading for recognition (non-blocking)
         self.recognition_queue = queue.Queue(maxsize=1)
         self.result_queue = queue.Queue(maxsize=1)
@@ -153,26 +158,80 @@ class FaceRecognitionSystem:
             print(f"  DNN detector failed: {e}")
     
     def _load_known_faces(self):
-        """Load all known faces from database"""
+        """Load all known faces from database including multi-angle embeddings"""
         print("Loading known faces from database...")
-        self.known_faces = database.get_all_students()
+        self.known_faces = []
+        
+        # Get all students
+        students = database.get_all_students()
+        
+        for student in students:
+            # Get all face images for this student
+            face_images = database.get_student_face_images(student['student_id'])
+            
+            if face_images:
+                # Student has multi-angle embeddings
+                embeddings = [face_img['face_embedding'] for face_img in face_images]
+                student['embeddings'] = embeddings
+                student['num_angles'] = len(embeddings)
+            else:
+                # Legacy student with single embedding
+                if student.get('face_embedding') is not None:
+                    student['embeddings'] = [student['face_embedding']]
+                    student['num_angles'] = 1
+                else:
+                    continue  # Skip students without embeddings
+            
+            self.known_faces.append(student)
+        
         print(f"Loaded {len(self.known_faces)} known faces")
+        total_embeddings = sum(s.get('num_angles', 1) for s in self.known_faces)
+        print(f"Total embeddings: {total_embeddings}")
     
     def reload_known_faces(self):
         """Reload known faces (call after adding new students)"""
         self._load_known_faces()
     
+    def preprocess_frame(self, frame: np.ndarray) -> np.ndarray:
+        """
+        Preprocess frame for better detection - OPTIMIZED FOR SPEED
+        Applies CLAHE and noise reduction (lighter processing)
+        """
+        # Convert to LAB color space
+        lab = cv2.cvtColor(frame, cv2.COLOR_BGR2LAB)
+        l, a, b = cv2.split(lab)
+        
+        # Apply CLAHE (Contrast Limited Adaptive Histogram Equalization) to L channel
+        clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+        l_clahe = clahe.apply(l)
+        
+        # Merge channels back
+        lab_clahe = cv2.merge([l_clahe, a, b])
+        
+        # Convert back to BGR
+        enhanced = cv2.cvtColor(lab_clahe, cv2.COLOR_LAB2BGR)
+        
+        # Skip bilateral filter for speed (still accurate without it)
+        return enhanced
+    
     def detect_faces(self, frame: np.ndarray) -> List[Tuple[int, int, int, int]]:
         """
         Face detection - returns SQUARE bounding boxes
         Uses Haar Cascade (fast) - YOLO for person detection optional
+        Enhanced with preprocessing for better low-light performance
         """
         h, w = frame.shape[:2]
         
+        # Preprocess frame for better detection
+        enhanced_frame = self.preprocess_frame(frame)
+        
         # Fast Haar Cascade detection (most reliable for faces)
         scale = getattr(config, 'DETECTION_SCALE', 0.5)
-        small_frame = cv2.resize(frame, None, fx=scale, fy=scale)
+        small_frame = cv2.resize(enhanced_frame, None, fx=scale, fy=scale)
         gray = cv2.cvtColor(small_frame, cv2.COLOR_BGR2GRAY)
+        
+        # Additional histogram equalization for gray image
+        gray = cv2.equalizeHist(gray)
         
         faces = self.face_cascade.detectMultiScale(
             gray,
@@ -220,14 +279,17 @@ class FaceRecognitionSystem:
     
     def get_face_embedding(self, face_image: np.ndarray) -> Optional[np.ndarray]:
         """
-        Get face embedding using DeepFace - optimized
+        Get face embedding using DeepFace - optimized with preprocessing
         """
         try:
             if face_image.shape[0] < 30 or face_image.shape[1] < 30:
                 return None
             
+            # Preprocess face image for better recognition in various lighting
+            face_enhanced = self.preprocess_frame(face_image)
+            
             # Resize for consistent results
-            face_resized = cv2.resize(face_image, (160, 160))
+            face_resized = cv2.resize(face_enhanced, (160, 160))
             
             # Get embedding - skip detection since we already have face
             embedding = DeepFace.represent(
@@ -246,8 +308,8 @@ class FaceRecognitionSystem:
     
     def compare_faces(self, embedding1: np.ndarray, embedding2: np.ndarray) -> float:
         """
-        Compare two face embeddings - improved for better accuracy
-        Uses combined cosine + euclidean similarity
+        Compare two face embeddings - STRICT matching for high accuracy
+        Uses cosine similarity (most reliable metric)
         """
         if embedding1 is None or embedding2 is None:
             return 0.0
@@ -262,21 +324,22 @@ class FaceRecognitionSystem:
         emb1_norm = embedding1 / norm1
         emb2_norm = embedding2 / norm2
         
-        # Cosine similarity
+        # Cosine similarity (primary metric - most accurate for face recognition)
         cosine_sim = np.dot(emb1_norm, emb2_norm)
         
-        # Euclidean distance converted to similarity
+        # Euclidean distance (secondary validation)
         euclidean_dist = np.linalg.norm(embedding1 - embedding2)
-        euclidean_sim = 1 / (1 + euclidean_dist * 0.1)  # Scale factor
         
-        # Combined score (cosine is more important)
-        combined = (cosine_sim * 0.7) + (euclidean_sim * 0.3)
+        # Reject if euclidean distance is too high (different people)
+        if euclidean_dist > 15.0:  # Strict threshold
+            return 0.0
         
-        return max(0, combined)
+        # Return only cosine similarity (more reliable)
+        return max(0, cosine_sim)
     
     def recognize_face(self, face_image: np.ndarray) -> Tuple[Optional[dict], float]:
         """
-        Recognize a face against known faces - with debug info
+        Recognize a face against known faces - Uses multi-angle embeddings for higher accuracy
         """
         face_embedding = self.get_face_embedding(face_image)
         
@@ -285,26 +348,65 @@ class FaceRecognitionSystem:
         
         best_match = None
         best_score = 0.0
+        second_best_score = 0.0
         all_scores = []
         
         for student in self.known_faces:
-            if student['face_embedding'] is not None:
-                similarity = self.compare_faces(face_embedding, student['face_embedding'])
-                all_scores.append((student['name'], similarity))
-                
-                if similarity > best_score:
-                    best_score = similarity
-                    best_match = student
+            # Compare against all embeddings for this student
+            embeddings = student.get('embeddings', [])
+            if not embeddings:
+                continue
+            
+            # Calculate average similarity across all angles
+            similarities = []
+            for stored_embedding in embeddings:
+                similarity = self.compare_faces(face_embedding, stored_embedding)
+                similarities.append(similarity)
+            
+            # Use best match among all angles (most forgiving approach)
+            # Alternative: Use average for more robust matching
+            max_similarity = max(similarities)
+            avg_similarity = np.mean(similarities)
+            
+            # Use weighted combination: 70% best, 30% average
+            final_similarity = 0.7 * max_similarity + 0.3 * avg_similarity
+            
+            all_scores.append((student['name'], final_similarity, student))
+            
+            if final_similarity > best_score:
+                second_best_score = best_score
+                best_score = final_similarity
+                best_match = student
+            elif final_similarity > second_best_score:
+                second_best_score = final_similarity
         
-        # Debug: print top match
+        # Sort and debug
         if all_scores:
             all_scores.sort(key=lambda x: x[1], reverse=True)
-            if all_scores[0][1] > 0.2:
-                print(f"  Best match: {all_scores[0][0]} = {all_scores[0][1]:.1%}")
+            if all_scores[0][1] > 0.25:
+                print(f"  Best: {all_scores[0][0]} = {all_scores[0][1]:.1%}", end="")
+                if len(all_scores) > 1 and all_scores[1][1] > 0.25:
+                    gap = all_scores[0][1] - all_scores[1][1]
+                    print(f" | 2nd: {all_scores[1][0]} = {all_scores[1][1]:.1%} | Gap: {gap:.1%}")
+                else:
+                    print()
         
-        threshold = getattr(config, 'FACE_RECOGNITION_THRESHOLD', 0.35)
-        if best_score >= threshold:
+        # STRICT threshold with gap requirement
+        base_threshold = getattr(config, 'FACE_RECOGNITION_THRESHOLD', 0.45)
+        
+        # Require significant gap between 1st and 2nd to avoid mix-ups
+        min_gap = 0.06  # Minimum 6% gap required
+        score_gap = best_score - second_best_score
+        
+        # Only accept if:
+        # 1. Score is above threshold
+        # 2. Gap between 1st and 2nd is significant (prevents name swapping)
+        if best_score >= base_threshold and score_gap >= min_gap:
             return best_match, best_score
+        
+        # If gap is too small, reject to avoid wrong identification
+        if score_gap < min_gap and best_score < 0.55:
+            return None, 0.0
         
         return None, best_score
     
@@ -327,26 +429,81 @@ class FaceRecognitionSystem:
             new_results = self.result_queue.get_nowait()
             if new_results:
                 self.cached_results = new_results
-                # Handle logging for recognized faces
+                # Handle logging for recognized faces with MULTI-FRAME VERIFICATION
                 for person in new_results:
                     if person['is_known'] and person['student']:
                         student = person['student']
                         student_id = student['student_id']
+                        confidence = person['confidence']
                         
-                        should_log = True
-                        if student_id in self.last_seen:
-                            time_diff = (current_time - self.last_seen[student_id]).total_seconds()
-                            if time_diff < config.MIN_TIME_BETWEEN_LOGS:
-                                should_log = False
+                        # Multi-frame verification: track across frames
+                        face_key = f"{person['bbox'][0]}_{person['bbox'][1]}"  # Approximate location
                         
-                        if should_log:
-                            database.log_visit(
-                                student['id'], student_id, student['name'], is_known=True
-                            )
-                            self.last_seen[student_id] = current_time
-                            print(f"✓ Logged: {student['name']} ({student_id})")
+                        # Find or create tracking entry
+                        tracking_key = None
+                        for key, data in self.face_tracking.items():
+                            # Check if this is the same face (nearby location)
+                            if abs(int(key.split('_')[0]) - person['bbox'][0]) < 50:
+                                tracking_key = key
+                                break
+                        
+                        if tracking_key is None:
+                            tracking_key = face_key
+                            self.face_tracking[tracking_key] = {
+                                'name': student['name'],
+                                'student_id': student_id,
+                                'count': 1,
+                                'scores': [confidence],
+                                'last_seen': current_time
+                            }
+                        else:
+                            track_data = self.face_tracking[tracking_key]
+                            # Only count if same person detected
+                            if track_data['name'] == student['name']:
+                                track_data['count'] += 1
+                                track_data['scores'].append(confidence)
+                                track_data['last_seen'] = current_time
+                            else:
+                                # Different person detected at similar location - reset
+                                self.face_tracking[tracking_key] = {
+                                    'name': student['name'],
+                                    'student_id': student_id,
+                                    'count': 1,
+                                    'scores': [confidence],
+                                    'last_seen': current_time
+                                }
+                        
+                        # Only log if detected consistently across multiple frames
+                        track_data = self.face_tracking[tracking_key]
+                        if track_data['count'] >= self.verification_frames:
+                            avg_confidence = sum(track_data['scores']) / len(track_data['scores'])
+                            
+                            # Check if already logged recently
+                            should_log = True
+                            if student_id in self.last_seen:
+                                time_diff = (current_time - self.last_seen[student_id]).total_seconds()
+                                if time_diff < config.MIN_TIME_BETWEEN_LOGS:
+                                    should_log = False
+                            
+                            if should_log:
+                                database.log_visit(
+                                    student['id'], student_id, student['name'], is_known=True
+                                )
+                                self.last_seen[student_id] = current_time
+                                print(f"✓ LOGGED: {student['name']} ({student_id}) - Verified across {track_data['count']} frames, Avg confidence: {avg_confidence:.1%}")
+                                # Reset tracking after logging
+                                del self.face_tracking[tracking_key]
         except queue.Empty:
             pass
+        
+        # Clean up old tracking data (faces that left the frame)
+        current_time_sec = current_time.timestamp()
+        keys_to_delete = []
+        for key, data in self.face_tracking.items():
+            if (current_time_sec - data['last_seen'].timestamp()) > 2.0:  # 2 seconds timeout
+                keys_to_delete.append(key)
+        for key in keys_to_delete:
+            del self.face_tracking[key]
         
         # Queue face images for background recognition (non-blocking)
         process_interval = getattr(config, 'PROCESS_EVERY_N_FRAMES', 5)
@@ -469,6 +626,136 @@ class FaceRecognitionSystem:
         
         return annotated_frame, results_to_draw
     
+    def process_frame_silent(self, frame: np.ndarray) -> Tuple[np.ndarray, List[dict]]:
+        """
+        Process frame silently - no visualization boxes, just logging
+        Returns empty frame and list of logged people with 'newly_logged' flag
+        """
+        self.frame_count += 1
+        current_time = datetime.now()
+        h, w = frame.shape[:2]
+        
+        # Detect faces (fast operation on small frame)
+        faces = self.detect_faces(frame)
+        
+        logged_people = []
+        
+        # Check for recognition results from background thread
+        try:
+            new_results = self.result_queue.get_nowait()
+            if new_results:
+                # Handle logging for recognized faces with MULTI-FRAME VERIFICATION
+                for person in new_results:
+                    if person['is_known'] and person['student']:
+                        student = person['student']
+                        student_id = student['student_id']
+                        confidence = person['confidence']
+                        
+                        # Multi-frame verification: track across frames
+                        face_key = f"{person['bbox'][0]}_{person['bbox'][1]}"
+                        
+                        # Find or create tracking entry
+                        tracking_key = None
+                        for key, data in self.face_tracking.items():
+                            if abs(int(key.split('_')[0]) - person['bbox'][0]) < 50:
+                                tracking_key = key
+                                break
+                        
+                        if tracking_key is None:
+                            tracking_key = face_key
+                            self.face_tracking[tracking_key] = {
+                                'name': student['name'],
+                                'student_id': student_id,
+                                'count': 1,
+                                'scores': [confidence],
+                                'last_seen': current_time
+                            }
+                        else:
+                            track_data = self.face_tracking[tracking_key]
+                            if track_data['name'] == student['name']:
+                                track_data['count'] += 1
+                                track_data['scores'].append(confidence)
+                                track_data['last_seen'] = current_time
+                            else:
+                                self.face_tracking[tracking_key] = {
+                                    'name': student['name'],
+                                    'student_id': student_id,
+                                    'count': 1,
+                                    'scores': [confidence],
+                                    'last_seen': current_time
+                                }
+                        
+                        # Only log if detected consistently across multiple frames
+                        track_data = self.face_tracking[tracking_key]
+                        if track_data['count'] >= self.verification_frames:
+                            avg_confidence = sum(track_data['scores']) / len(track_data['scores'])
+                            
+                            # Check if already logged recently
+                            should_log = True
+                            if student_id in self.last_seen:
+                                time_diff = (current_time - self.last_seen[student_id]).total_seconds()
+                                if time_diff < config.MIN_TIME_BETWEEN_LOGS:
+                                    should_log = False
+                            
+                            if should_log:
+                                database.log_visit(
+                                    student['id'], student_id, student['name'], is_known=True
+                                )
+                                self.last_seen[student_id] = current_time
+                                print(f"✓ LOGGED: {student['name']} ({student_id}) - Verified across {track_data['count']} frames, Avg: {avg_confidence:.1%}")
+                                
+                                # Add to return list with newly_logged flag
+                                logged_people.append({
+                                    'student': student,
+                                    'confidence': avg_confidence,
+                                    'newly_logged': True
+                                })
+                                
+                                # Reset tracking after logging
+                                del self.face_tracking[tracking_key]
+        except queue.Empty:
+            pass
+        
+        # Clean up old tracking data
+        current_time_sec = current_time.timestamp()
+        keys_to_delete = []
+        for key, data in self.face_tracking.items():
+            if (current_time_sec - data['last_seen'].timestamp()) > 2.0:
+                keys_to_delete.append(key)
+        for key in keys_to_delete:
+            del self.face_tracking[key]
+        
+        # Queue face images for background recognition
+        process_interval = getattr(config, 'PROCESS_EVERY_N_FRAMES', 3)
+        if self.frame_count % process_interval == 0 and faces:
+            face_images = []
+            bboxes = []
+            
+            for (x1, y1, x2, y2) in faces:
+                x1, y1 = max(0, x1), max(0, y1)
+                x2, y2 = min(w, x2), min(h, y2)
+                
+                if x2 <= x1 or y2 <= y1:
+                    continue
+                
+                # Add padding for better recognition
+                pad = int((x2 - x1) * 0.2)
+                x1_p, y1_p = max(0, x1 - pad), max(0, y1 - pad)
+                x2_p, y2_p = min(w, x2 + pad), min(h, y2 + pad)
+                
+                face_image = frame[y1_p:y2_p, x1_p:x2_p].copy()
+                face_images.append(face_image)
+                bboxes.append((x1, y1, x2, y2))
+            
+            # Send to recognition thread (non-blocking)
+            if face_images:
+                try:
+                    self.recognition_queue.put_nowait((face_images, bboxes, frame))
+                except queue.Full:
+                    pass
+        
+        return frame, logged_people
+    
     def register_new_student(self, frame: np.ndarray, student_id: str, name: str,
                             department: str, year: int) -> bool:
         """
@@ -543,6 +830,79 @@ class FaceRecognitionSystem:
             self.reload_known_faces()
         
         return success
+    
+    def register_student_multi_angle(self, student_id: str, name: str, 
+                                     department: str, year: int, 
+                                     face_data_list: List[dict]) -> bool:
+        """
+        Register a new student with multiple face angles
+        face_data_list: List of dicts with 'embedding', 'image_path', 'angle_description', 'order'
+        """
+        print(f"\nRegistering student with {len(face_data_list)} face angles: {name} ({student_id})")
+        
+        if not face_data_list:
+            print("  ✗ No face data provided!")
+            return False
+        
+        try:
+            # Check if student already exists
+            existing = database.get_student_by_id(student_id)
+            
+            if existing:
+                # Update existing student
+                # Use first embedding as primary
+                success = database.update_student(
+                    student_id=student_id, 
+                    name=name, 
+                    department=department,
+                    year=year, 
+                    face_embedding=face_data_list[0]['embedding'], 
+                    face_image_path=face_data_list[0]['image_path']
+                )
+                
+                if not success:
+                    print("  ✗ Failed to update student!")
+                    return False
+                
+                student_db_id = existing['id']
+                
+                # Delete old face images
+                database.delete_student_face_images(student_id)
+                
+                print(f"  ✓ Updated: {name}")
+            else:
+                # Add new student with first embedding as primary
+                success = database.add_student(
+                    student_id=student_id, 
+                    name=name, 
+                    department=department,
+                    year=year, 
+                    face_embedding=face_data_list[0]['embedding'], 
+                    face_image_path=face_data_list[0]['image_path']
+                )
+                
+                if not success:
+                    print("  ✗ Failed to add student!")
+                    return False
+                
+                # Get the new student's database ID
+                new_student = database.get_student_by_id(student_id)
+                student_db_id = new_student['id']
+                
+                print(f"  ✓ Added: {name}")
+            
+            # Store all face images
+            database.add_student_face_images(student_db_id, student_id, face_data_list)
+            
+            # Reload known faces
+            self.reload_known_faces()
+            
+            print(f"  ✓ Successfully registered with {len(face_data_list)} angles")
+            return True
+            
+        except Exception as e:
+            print(f"  ✗ Error during registration: {e}")
+            return False
 
 def main():
     """Test the face recognition system"""

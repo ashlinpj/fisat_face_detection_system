@@ -114,81 +114,78 @@ class CanteenFaceDetectionGUI:
         self.build_stats_tab()
     
     def build_detection_tab(self):
-        """Build the live detection tab"""
-        # Split into left (video) and right (info) panels
-        left_frame = ttk.Frame(self.detection_tab)
-        left_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(0, 5))
+        """Build the visitor logging tab - Simple view without boxes"""
+        # Main container
+        main_frame = ttk.Frame(self.detection_tab)
+        main_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
         
-        right_frame = ttk.Frame(self.detection_tab, width=300)
-        right_frame.pack(side=tk.RIGHT, fill=tk.Y, padx=(5, 0))
-        right_frame.pack_propagate(False)
-        
-        # Video display
-        video_frame = ttk.LabelFrame(left_frame, text="Camera Feed", padding="5")
-        video_frame.pack(fill=tk.BOTH, expand=True)
-        
-        self.video_label = ttk.Label(video_frame, text="Camera not started")
-        self.video_label.pack(fill=tk.BOTH, expand=True)
+        # Top control section
+        control_frame = ttk.LabelFrame(main_frame, text="System Control", padding="15")
+        control_frame.pack(fill=tk.X, pady=(0, 10))
         
         # Control buttons
-        control_frame = ttk.Frame(left_frame)
-        control_frame.pack(fill=tk.X, pady=10)
+        btn_frame = ttk.Frame(control_frame)
+        btn_frame.pack(fill=tk.X)
         
         self.start_btn = ttk.Button(
-            control_frame,
-            text="▶ Start Detection",
+            btn_frame,
+            text="▶ Start Logging",
             style='Big.TButton',
             command=self.toggle_detection
         )
         self.start_btn.pack(side=tk.LEFT, padx=5)
         
         self.register_btn = ttk.Button(
-            control_frame,
-            text="➕ Register Face",
+            btn_frame,
+            text="➕ Register New Student",
             style='Big.TButton',
             command=self.open_registration_dialog
         )
         self.register_btn.pack(side=tk.LEFT, padx=5)
         
-        screenshot_btn = ttk.Button(
-            control_frame,
-            text="📷 Screenshot",
-            command=self.take_screenshot
+        # Status info
+        status_info = ttk.Frame(control_frame)
+        status_info.pack(fill=tk.X, pady=(10, 0))
+        
+        ttk.Label(status_info, text="Status:", font=('Segoe UI', 10, 'bold')).pack(side=tk.LEFT, padx=5)
+        self.detection_status = ttk.Label(status_info, text="⚪ Stopped", font=('Segoe UI', 10))
+        self.detection_status.pack(side=tk.LEFT)
+        
+        # Live visitor notifications
+        notification_frame = ttk.LabelFrame(main_frame, text="Live Visitor Log", padding="15")
+        notification_frame.pack(fill=tk.BOTH, expand=True)
+        
+        # Info text
+        info_label = ttk.Label(
+            notification_frame, 
+            text="System will automatically log visitors when they enter the canteen.\nNo boxes or live feed - just clean logging.",
+            font=('Segoe UI', 9),
+            foreground='gray'
         )
-        screenshot_btn.pack(side=tk.LEFT, padx=5)
+        info_label.pack(pady=(0, 10))
         
-        # Right panel - Detection info
-        info_frame = ttk.LabelFrame(right_frame, text="Detection Info", padding="10")
-        info_frame.pack(fill=tk.X, pady=(0, 10))
+        # Recent visitors list with scrollbar
+        list_frame = ttk.Frame(notification_frame)
+        list_frame.pack(fill=tk.BOTH, expand=True)
         
-        self.detected_count_label = ttk.Label(info_frame, text="Faces Detected: 0")
-        self.detected_count_label.pack(anchor=tk.W)
+        scrollbar = ttk.Scrollbar(list_frame)
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
         
-        self.known_count_label = ttk.Label(info_frame, text="Known: 0")
-        self.known_count_label.pack(anchor=tk.W)
-        
-        self.unknown_count_label = ttk.Label(info_frame, text="Unknown: 0")
-        self.unknown_count_label.pack(anchor=tk.W)
-        
-        self.fps_label = ttk.Label(info_frame, text="FPS: 0")
-        self.fps_label.pack(anchor=tk.W)
-        
-        # Recent detections
-        recent_frame = ttk.LabelFrame(right_frame, text="Recent Detections", padding="10")
-        recent_frame.pack(fill=tk.BOTH, expand=True)
-        
-        self.recent_listbox = tk.Listbox(recent_frame, font=('Consolas', 9))
-        self.recent_listbox.pack(fill=tk.BOTH, expand=True)
-        
-        # Today's stats
-        today_frame = ttk.LabelFrame(right_frame, text="Today's Summary", padding="10")
-        today_frame.pack(fill=tk.X, pady=(10, 0))
-        
-        self.today_visits_label = ttk.Label(today_frame, text="Total Visits: 0")
-        self.today_visits_label.pack(anchor=tk.W)
-        
-        self.today_unique_label = ttk.Label(today_frame, text="Unique Visitors: 0")
-        self.today_unique_label.pack(anchor=tk.W)
+        self.recent_listbox = tk.Listbox(
+            list_frame, 
+            font=('Consolas', 11),
+            height=20,
+            yscrollcommand=scrollbar.set
+        )
+        self.recent_listbox.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        scrollbar.config(command=self.recent_listbox.yview)
+    
+    def add_notification(self, message):
+        """Add notification to the recent listbox"""
+        self.recent_listbox.insert(0, message)  # Insert at top
+        # Keep only last 100 entries
+        if self.recent_listbox.size() > 100:
+            self.recent_listbox.delete(100, tk.END)
     
     def build_students_tab(self):
         """Build the student management tab"""
@@ -345,132 +342,129 @@ class CanteenFaceDetectionGUI:
             self.start_detection()
     
     def start_detection(self):
-        """Start live detection"""
+        """Start visitor logging - non-blocking"""
         if self.face_system is None:
             messagebox.showerror("Error", "System not initialized yet!")
             return
         
-        self.cap = cv2.VideoCapture(config.CAMERA_INDEX)
-        self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, config.FRAME_WIDTH)
-        self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, config.FRAME_HEIGHT)
+        # Update UI immediately
+        self.start_btn.config(text="⏹ Stop Logging", state='disabled')
+        self.detection_status.config(text="🟡 Starting camera...", foreground="orange")
         
-        if not self.cap.isOpened():
-            messagebox.showerror("Error", "Could not open camera!")
-            return
+        # Initialize camera in background thread to prevent GUI lag
+        def init_camera():
+            try:
+                self.cap = cv2.VideoCapture(config.CAMERA_INDEX)
+                self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, config.FRAME_WIDTH)
+                self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, config.FRAME_HEIGHT)
+                
+                if not self.cap.isOpened():
+                    self.root.after(0, lambda: messagebox.showerror("Error", "Could not open camera!"))
+                    self.root.after(0, lambda: self.start_btn.config(state='normal'))
+                    self.root.after(0, lambda: self.detection_status.config(text="🔴 Camera Error", foreground="red"))
+                    return
+                
+                self.is_running = True
+                self.root.after(0, lambda: self.start_btn.config(state='normal'))
+                self.root.after(0, lambda: self.detection_status.config(text="🟢 Logging Active", foreground="green"))
+                self.root.after(0, lambda: self.add_notification("System started. Monitoring for visitors..."))
+                
+                # Start video processing loop
+                self.video_loop()
+                
+            except Exception as e:
+                self.root.after(0, lambda: messagebox.showerror("Error", f"Camera initialization failed: {e}"))
+                self.root.after(0, lambda: self.start_btn.config(state='normal', text="▶ Start Logging"))
+                self.root.after(0, lambda: self.detection_status.config(text="🔴 Error", foreground="red"))
         
-        self.is_running = True
-        self.start_btn.config(text="⏹ Stop Detection")
-        self.update_status("🟢 Detection Running", "green")
-        
-        self.video_thread = threading.Thread(target=self.video_loop, daemon=True)
+        self.video_thread = threading.Thread(target=init_camera, daemon=True)
         self.video_thread.start()
     
     def stop_detection(self):
-        """Stop live detection"""
+        """Stop visitor logging"""
         self.is_running = False
         if self.cap:
             self.cap.release()
-        self.start_btn.config(text="▶ Start Detection")
-        self.update_status("⚪ Detection Stopped", "gray")
-        self.video_label.config(image='', text="Camera stopped")
+        self.start_btn.config(text="▶ Start Logging")
+        self.detection_status.config(text="⚪ Stopped", foreground="gray")
+        self.add_notification("System stopped.")
     
     def video_loop(self):
-        """Main video processing loop"""
+        """Main video processing loop - background only, no display"""
         import time
-        frame_count = 0
-        start_time = time.time()
-        fps = 0
         
         while self.is_running:
-            ret, frame = self.cap.read()
-            if not ret:
-                break
-            
-            self.current_frame = frame.copy()
-            
-            # Process frame
-            annotated_frame, recognized_people = self.face_system.process_frame(frame)
-            
-            # Calculate FPS
-            frame_count += 1
-            elapsed = time.time() - start_time
-            if elapsed >= 1.0:
-                fps = frame_count / elapsed
-                frame_count = 0
-                start_time = time.time()
-            
-            # Convert for display
-            annotated_frame = cv2.cvtColor(annotated_frame, cv2.COLOR_BGR2RGB)
-            
-            # Resize for display
-            display_width = 800
-            h, w = annotated_frame.shape[:2]
-            scale = display_width / w
-            display_height = int(h * scale)
-            annotated_frame = cv2.resize(annotated_frame, (display_width, display_height))
-            
-            # Convert to PhotoImage
-            img = Image.fromarray(annotated_frame)
-            imgtk = ImageTk.PhotoImage(image=img)
-            
-            # Update UI
-            def update_ui():
-                self.video_label.imgtk = imgtk
-                self.video_label.config(image=imgtk)
+            try:
+                ret, frame = self.cap.read()
+                if not ret:
+                    print("Failed to read frame from camera")
+                    time.sleep(0.1)
+                    continue
                 
-                known = sum(1 for p in recognized_people if p['is_known'])
-                unknown = len(recognized_people) - known
+                # Store current frame for registration
+                self.current_frame = frame.copy()
                 
-                self.detected_count_label.config(text=f"Faces Detected: {len(recognized_people)}")
-                self.known_count_label.config(text=f"Known: {known}")
-                self.unknown_count_label.config(text=f"Unknown: {unknown}")
-                self.fps_label.config(text=f"FPS: {fps:.1f}")
+                # Process frame (recognition only - no visualization)
+                try:
+                    _, recognized_people = self.face_system.process_frame_silent(frame)
+                    
+                    # Check for new logs and notify
+                    for person in recognized_people:
+                        if person.get('newly_logged'):
+                            student = person['student']
+                            timestamp = datetime.now().strftime('%I:%M:%S %p')
+                            date_str = datetime.now().strftime('%Y-%m-%d')
+                            msg = f"✓ {timestamp} | {student['name']} ({student['student_id']}) | {date_str}"
+                            self.root.after(0, lambda m=msg: self.add_notification(m))
+                            
+                except Exception as e:
+                    print(f"Error processing frame: {e}")
                 
-                # Update recent detections
-                for person in recognized_people:
-                    if person['is_known']:
-                        name = person['student']['name']
-                        time_str = datetime.now().strftime('%H:%M:%S')
-                        self.recent_listbox.insert(0, f"{time_str} - {name}")
-                        if self.recent_listbox.size() > 20:
-                            self.recent_listbox.delete(20, tk.END)
-            
-            self.root.after(0, update_ui)
-            
-            # Small delay to prevent overloading
-            time.sleep(0.03)
+                # Small delay
+                time.sleep(0.05)
+                
+            except Exception as e:
+                print(f"Error in video loop: {e}")
+                time.sleep(0.1)
+                continue
     
     def open_registration_dialog(self):
-        """Open dialog to register new student"""
+        """Open dialog to register new student with multi-angle capture"""
         if not self.is_running:
             messagebox.showwarning("Warning", "Please start detection first!")
             return
         
-        dialog = tk.Toplevel(self.root)
-        dialog.title("Register New Student")
-        dialog.geometry("400x300")
-        dialog.transient(self.root)
-        dialog.grab_set()
+        # First, get student details
+        info_dialog = tk.Toplevel(self.root)
+        info_dialog.title("Register New Student - Step 1")
+        info_dialog.geometry("400x350")
+        info_dialog.transient(self.root)
+        info_dialog.grab_set()
+        
+        ttk.Label(info_dialog, text="Enter Student Details", font=('Segoe UI', 14, 'bold')).pack(pady=10)
         
         # Form fields
-        ttk.Label(dialog, text="Student ID:").pack(pady=5)
-        id_entry = ttk.Entry(dialog, width=30)
-        id_entry.pack()
+        form_frame = ttk.Frame(info_dialog, padding=20)
+        form_frame.pack(fill=tk.BOTH, expand=True)
         
-        ttk.Label(dialog, text="Name:").pack(pady=5)
-        name_entry = ttk.Entry(dialog, width=30)
-        name_entry.pack()
+        ttk.Label(form_frame, text="Student ID:").pack(anchor=tk.W, pady=(5, 0))
+        id_entry = ttk.Entry(form_frame, width=40)
+        id_entry.pack(pady=(0, 10), fill=tk.X)
         
-        ttk.Label(dialog, text="Department:").pack(pady=5)
-        dept_entry = ttk.Entry(dialog, width=30)
-        dept_entry.pack()
+        ttk.Label(form_frame, text="Name:").pack(anchor=tk.W, pady=(5, 0))
+        name_entry = ttk.Entry(form_frame, width=40)
+        name_entry.pack(pady=(0, 10), fill=tk.X)
         
-        ttk.Label(dialog, text="Year (1-4):").pack(pady=5)
+        ttk.Label(form_frame, text="Department:").pack(anchor=tk.W, pady=(5, 0))
+        dept_entry = ttk.Entry(form_frame, width=40)
+        dept_entry.pack(pady=(0, 10), fill=tk.X)
+        
+        ttk.Label(form_frame, text="Year (1-4):").pack(anchor=tk.W, pady=(5, 0))
         year_var = tk.StringVar(value="1")
-        year_combo = ttk.Combobox(dialog, textvariable=year_var, values=['1', '2', '3', '4'], width=27)
-        year_combo.pack()
+        year_combo = ttk.Combobox(form_frame, textvariable=year_var, values=['1', '2', '3', '4'], width=37)
+        year_combo.pack(pady=(0, 10), fill=tk.X)
         
-        def do_register():
+        def start_capture():
             student_id = id_entry.get().strip()
             name = name_entry.get().strip()
             department = dept_entry.get().strip()
@@ -480,21 +474,281 @@ class CanteenFaceDetectionGUI:
                 messagebox.showerror("Error", "Student ID and Name are required!")
                 return
             
-            if self.current_frame is not None:
-                success = self.face_system.register_new_student(
-                    self.current_frame, student_id, name, department, year
-                )
-                
-                if success:
-                    messagebox.showinfo("Success", f"Student {name} registered successfully!")
-                    dialog.destroy()
-                    self.refresh_students()
-                else:
-                    messagebox.showerror("Error", "Failed to register student. Please ensure face is visible.")
-            else:
-                messagebox.showerror("Error", "No camera frame available!")
+            info_dialog.destroy()
+            self.open_multi_angle_capture(student_id, name, department, year)
         
-        ttk.Button(dialog, text="📷 Capture & Register", command=do_register).pack(pady=20)
+        ttk.Button(form_frame, text="Next: Capture Face ➡", command=start_capture, 
+                  style='Big.TButton').pack(pady=20)
+    
+    def open_multi_angle_capture(self, student_id, name, department, year):
+        """Multi-angle face capture dialog - similar to smartphone face recognition"""
+        dialog = tk.Toplevel(self.root)
+        dialog.title("Face Capture - Multi-Angle Registration")
+        dialog.geometry("800x650")
+        dialog.resizable(True, True)
+        dialog.transient(self.root)
+        dialog.grab_set()
+        
+        # Get capture angles from config
+        capture_angles = getattr(config, 'CAPTURE_ANGLES', [
+            {"name": "Center", "description": "Look straight at the camera", "emoji": "😊"},
+            {"name": "Turn Left", "description": "Turn your head slightly to the left", "emoji": "😏"},
+            {"name": "Turn Right", "description": "Turn your head slightly to the right", "emoji": "😌"},
+            {"name": "Look Up", "description": "Tilt your head slightly up", "emoji": "😄"},
+            {"name": "Look Down", "description": "Tilt your head slightly down", "emoji": "🙂"}
+        ])
+        
+        captured_data = []
+        current_angle_idx = [0]  # Use list to allow modification in nested function
+        is_capturing = [False]  # Prevent multiple clicks
+        
+        # Main container with scrollbar support
+        main_container = ttk.Frame(dialog)
+        main_container.pack(fill=tk.BOTH, expand=True)
+        
+        # Header
+        header_frame = ttk.Frame(main_container)
+        header_frame.pack(fill=tk.X, pady=5, padx=15)
+        
+        ttk.Label(header_frame, text=f"Registering: {name} ({student_id})", 
+                 font=('Segoe UI', 11, 'bold')).pack(side=tk.LEFT)
+        
+        progress_label = ttk.Label(header_frame, text=f"0/{len(capture_angles)} angles", 
+                                  font=('Segoe UI', 10))
+        progress_label.pack(side=tk.RIGHT)
+        
+        # Video frame - more compact
+        video_frame = ttk.LabelFrame(main_container, text="Camera", padding=5)
+        video_frame.pack(fill=tk.BOTH, expand=True, padx=15, pady=5)
+        
+        video_label = ttk.Label(video_frame)
+        video_label.pack()
+        
+        # Instruction frame - more compact
+        instruction_frame = ttk.LabelFrame(main_container, text="Instructions", padding=8)
+        instruction_frame.pack(fill=tk.X, padx=15, pady=5)
+        
+        # Horizontal layout for emoji and text
+        instr_content = ttk.Frame(instruction_frame)
+        instr_content.pack(fill=tk.X)
+        
+        emoji_label = ttk.Label(instr_content, text="", font=('Segoe UI', 32))
+        emoji_label.pack(side=tk.LEFT, padx=10)
+        
+        text_frame = ttk.Frame(instr_content)
+        text_frame.pack(side=tk.LEFT, fill=tk.X, expand=True)
+        
+        angle_label = ttk.Label(text_frame, text="", font=('Segoe UI', 11, 'bold'))
+        angle_label.pack(anchor=tk.W)
+        
+        desc_label = ttk.Label(text_frame, text="", font=('Segoe UI', 9))
+        desc_label.pack(anchor=tk.W)
+        
+        # Control buttons
+        control_frame = ttk.Frame(main_container)
+        control_frame.pack(fill=tk.X, padx=15, pady=10)
+        
+        capture_btn = ttk.Button(control_frame, text="📷 Capture This Angle", 
+                                style='Big.TButton')
+        capture_btn.pack(side=tk.LEFT, padx=5)
+        
+        finish_btn = ttk.Button(control_frame, text="✓ Finish Registration", 
+                               state=tk.DISABLED, style='Big.TButton')
+        finish_btn.pack(side=tk.LEFT, padx=5)
+        
+        cancel_btn = ttk.Button(control_frame, text="Cancel", 
+                               command=lambda: dialog.destroy())
+        cancel_btn.pack(side=tk.RIGHT, padx=5)
+        
+        # Update instruction display
+        def update_instruction():
+            if current_angle_idx[0] < len(capture_angles):
+                angle = capture_angles[current_angle_idx[0]]
+                emoji_label.config(text=angle['emoji'])
+                angle_label.config(text=f"Angle {current_angle_idx[0] + 1}: {angle['name']}")
+                desc_label.config(text=angle['description'])
+            else:
+                emoji_label.config(text="✅")
+                angle_label.config(text="All angles captured!")
+                desc_label.config(text="Click 'Finish Registration' to complete")
+        
+        # Video update loop
+        def update_video():
+            try:
+                if self.current_frame is not None:
+                    frame = self.current_frame.copy()
+                    
+                    # Draw face detection rectangle
+                    faces = self.face_system.detect_faces(frame)
+                    if faces:
+                        x1, y1, x2, y2 = faces[0]
+                        cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 3)
+                        cv2.putText(frame, "Ready!", (x1, y1-10), 
+                                  cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 0), 2)
+                    else:
+                        cv2.putText(frame, "Position Your Face", (30, 40), 
+                                  cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 0, 255), 2)
+                    
+                    # Add angle progress
+                    status_text = f"{current_angle_idx[0] + 1}/{len(capture_angles)}"
+                    cv2.putText(frame, status_text, (frame.shape[1] - 80, 30), 
+                              cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 255, 255), 2)
+                    
+                    # Convert and display - smaller size for compact window
+                    frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                    frame = cv2.resize(frame, (560, 420))
+                    img = Image.fromarray(frame)
+                    imgtk = ImageTk.PhotoImage(image=img)
+                    video_label.imgtk = imgtk
+                    video_label.configure(image=imgtk)
+                else:
+                    # Show "No camera" message
+                    blank = np.zeros((420, 560, 3), dtype=np.uint8)
+                    cv2.putText(blank, "Camera Not Available", (120, 210), 
+                              cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2)
+                    img = Image.fromarray(blank)
+                    imgtk = ImageTk.PhotoImage(image=img)
+                    video_label.imgtk = imgtk
+                    video_label.configure(image=imgtk)
+            except Exception as e:
+                print(f"Video update error: {e}")
+            
+            if dialog.winfo_exists():
+                dialog.after(30, update_video)
+        
+        # Capture current angle
+        def capture_angle():
+            if is_capturing[0]:
+                return  # Already capturing
+            
+            is_capturing[0] = True
+            capture_btn.config(state=tk.DISABLED, text="Capturing...")
+            
+            # Run capture in background thread to avoid freezing UI
+            def do_capture():
+                try:
+                    if self.current_frame is None:
+                        dialog.after(0, lambda: messagebox.showerror("Error", "No camera frame available!"))
+                        return
+                    
+                    # Copy the frame to work with
+                    frame_copy = self.current_frame.copy()
+                    angle = capture_angles[current_angle_idx[0]]
+                    
+                    # Detect and extract face
+                    faces = self.face_system.detect_faces(frame_copy)
+                    if not faces:
+                        dialog.after(0, lambda: messagebox.showerror("Error", "No face detected! Ensure face is visible."))
+                        return
+                    
+                    # Get face region
+                    x1, y1, x2, y2 = faces[0]
+                    h, w = frame_copy.shape[:2]
+                    pad = int((x2 - x1) * 0.35)
+                    x1 = max(0, x1 - pad)
+                    y1 = max(0, y1 - pad)
+                    x2 = min(w, x2 + pad)
+                    y2 = min(h, y2 + pad)
+                    
+                    face_image = frame_copy[y1:y2, x1:x2]
+                    
+                    # Get embedding
+                    print(f"Extracting embedding for angle {current_angle_idx[0] + 1}...")
+                    embedding = self.face_system.get_face_embedding(face_image)
+                    if embedding is None:
+                        dialog.after(0, lambda: messagebox.showerror("Error", "Could not extract face features!"))
+                        return
+                    
+                    # Save image
+                    database.ensure_directories()
+                    face_filename = f"{student_id}_angle{current_angle_idx[0] + 1}_{angle['name'].replace(' ', '_').lower()}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.jpg"
+                    face_path = os.path.join(config.FACES_DIR, face_filename)
+                    cv2.imwrite(face_path, face_image)
+                    
+                    # Store capture data
+                    captured_data.append({
+                        'embedding': embedding,
+                        'image_path': face_path,
+                        'angle_description': angle['name'],
+                        'order': current_angle_idx[0] + 1
+                    })
+                    
+                    print(f"✓ Captured angle {current_angle_idx[0] + 1}/{len(capture_angles)}")
+                    
+                    # Update UI in main thread
+                    def update_ui():
+                        current_angle_idx[0] += 1
+                        progress_label.config(text=f"{current_angle_idx[0]}/{len(capture_angles)} angles")
+                        
+                        if current_angle_idx[0] < len(capture_angles):
+                            update_instruction()
+                            capture_btn.config(text="📷 Capture This Angle", state=tk.NORMAL)
+                        else:
+                            # All angles captured
+                            capture_btn.config(text="All Captured!", state=tk.DISABLED)
+                            finish_btn.config(state=tk.NORMAL)
+                            update_instruction()
+                        
+                        is_capturing[0] = False
+                    
+                    dialog.after(0, update_ui)
+                    
+                except Exception as e:
+                    print(f"Capture error: {e}")
+                    import traceback
+                    traceback.print_exc()
+                    dialog.after(0, lambda: messagebox.showerror("Error", f"Capture failed: {str(e)}"))
+                    dialog.after(0, lambda: capture_btn.config(state=tk.NORMAL, text="📷 Capture This Angle"))
+                    is_capturing[0] = False
+            
+            # Start capture in background thread
+            threading.Thread(target=do_capture, daemon=True).start()
+        
+        # Finish registration
+        def finish_registration():
+            finish_btn.config(state=tk.DISABLED, text="Registering...")
+            capture_btn.config(state=tk.DISABLED)
+            
+            def do_registration():
+                try:
+                    if len(captured_data) == 0:
+                        dialog.after(0, lambda: messagebox.showerror("Error", "No face data captured!"))
+                        dialog.after(0, lambda: finish_btn.config(state=tk.NORMAL, text="✓ Finish Registration"))
+                        return
+                    
+                    print(f"\nRegistering {name} with {len(captured_data)} angles...")
+                    
+                    # Register student with multi-angle data
+                    success = self.face_system.register_student_multi_angle(
+                        student_id, name, department, year, captured_data
+                    )
+                    
+                    if success:
+                        dialog.after(0, lambda: messagebox.showinfo("Success", 
+                                          f"Student {name} registered successfully with {len(captured_data)} face angles!"))
+                        dialog.after(0, lambda: dialog.destroy())
+                        self.root.after(100, self.refresh_students)
+                    else:
+                        dialog.after(0, lambda: messagebox.showerror("Error", "Failed to register student!"))
+                        dialog.after(0, lambda: finish_btn.config(state=tk.NORMAL, text="✓ Finish Registration"))
+                        dialog.after(0, lambda: capture_btn.config(state=tk.NORMAL))
+                        
+                except Exception as e:
+                    print(f"Registration error: {e}")
+                    import traceback
+                    traceback.print_exc()
+                    dialog.after(0, lambda: messagebox.showerror("Error", f"Registration failed: {str(e)}"))
+                    dialog.after(0, lambda: finish_btn.config(state=tk.NORMAL, text="✓ Finish Registration"))
+                    dialog.after(0, lambda: capture_btn.config(state=tk.NORMAL))
+            
+            # Run registration in background thread
+            threading.Thread(target=do_registration, daemon=True).start()
+        
+        capture_btn.config(command=capture_angle)
+        finish_btn.config(command=finish_registration)
+        
+        update_instruction()
+        update_video()
     
     def add_student_dialog(self):
         """Add student from file"""
@@ -643,29 +897,24 @@ class CanteenFaceDetectionGUI:
         # Update detailed stats
         self.stats_text.delete(1.0, tk.END)
         
-        stats_report = f"""
-╔════════════════════════════════════════════════════════════╗
-║           CANTEEN FACE DETECTION - STATISTICS REPORT       ║
-╠════════════════════════════════════════════════════════════╣
-║  Report Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S'):<39}║
-╠════════════════════════════════════════════════════════════╣
-║  TODAY'S SUMMARY ({stats['date']})                          ║
-╠════════════════════════════════════════════════════════════╣
-║  • Total Visits:        {stats['total_visits']:<35}║
-║  • Unique Visitors:     {stats['unique_visitors']:<35}║
-║  • Unknown Visitors:    {stats['unknown_visitors']:<35}║
-║  • Avg Duration:        {stats['average_duration_minutes']:<35}min ║
-╠════════════════════════════════════════════════════════════╣
-║  REGISTERED STUDENTS                                       ║
-╠════════════════════════════════════════════════════════════╣
-║  • Total Registered:    {len(students):<35}║
-╚════════════════════════════════════════════════════════════╝
-"""
-        self.stats_text.insert(tk.END, stats_report)
+        stats_report = "=" * 64 + "\n"
+        stats_report += "     CANTEEN FACE DETECTION - STATISTICS REPORT\n"
+        stats_report += "=" * 64 + "\n"
+        stats_report += f"  Report Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n"
+        stats_report += "=" * 64 + "\n"
+        stats_report += f"  TODAY'S SUMMARY ({stats['date']})\n"
+        stats_report += "=" * 64 + "\n"
+        stats_report += f"  - Total Visits:        {stats['total_visits']}\n"
+        stats_report += f"  - Unique Visitors:     {stats['unique_visitors']}\n"
+        stats_report += f"  - Unknown Visitors:    {stats['unknown_visitors']}\n"
+        stats_report += f"  - Avg Duration:        {stats['average_duration_minutes']} min\n"
+        stats_report += "=" * 64 + "\n"
+        stats_report += "  REGISTERED STUDENTS\n"
+        stats_report += "=" * 64 + "\n"
+        stats_report += f"  - Total Registered:    {len(students)}\n"
+        stats_report += "=" * 64 + "\n"
         
-        # Update today's summary in detection tab
-        self.today_visits_label.config(text=f"Total Visits: {stats['total_visits']}")
-        self.today_unique_label.config(text=f"Unique Visitors: {stats['unique_visitors']}")
+        self.stats_text.insert(tk.END, stats_report)
     
     def refresh_all_data(self):
         """Refresh all data in all tabs"""

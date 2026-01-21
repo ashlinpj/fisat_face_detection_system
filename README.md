@@ -4,12 +4,24 @@
 
 A real-time face detection and recognition system designed to track student visits to the college canteen. This system helps prevent false complaints by maintaining a record of who visited the canteen with timestamps.
 
+## 🆕 NEW: Multi-Angle Face Registration (v2.0)
+
+**Now features smartphone-style face registration!** Similar to iPhone Face ID or Android Face Unlock, the system captures your face from 5 different angles for improved recognition accuracy.
+
+- 📸 **5-Angle Capture**: Center, Left, Right, Up, Down
+- 🎯 **Higher Accuracy**: Better recognition from any viewing angle
+- 🌟 **Guided Process**: Step-by-step instructions with emoji indicators
+- 💡 **Lighting Tolerance**: Works in various lighting conditions
+
+👉 **[See Multi-Angle Setup Guide](MULTI_ANGLE_SETUP.md)** for detailed instructions
+
 ---
 
 ## 📋 Features
 
 - **Real-time Face Detection** using YOLOv8 and DeepFace
 - **Face Recognition** to identify registered students
+- **🆕 Multi-Angle Registration** for enhanced accuracy (smartphone-like)
 - **Automatic Visit Logging** with date, time, and duration tracking
 - **Student Registration** with face capture
 - **Unknown Face Detection** for identifying unregistered visitors

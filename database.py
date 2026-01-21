@@ -43,6 +43,21 @@ def init_database():
         )
     ''')
     
+    # Face images table - stores multiple face images per student from different angles
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS face_images (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            student_db_id INTEGER NOT NULL,
+            student_id TEXT NOT NULL,
+            face_embedding TEXT NOT NULL,
+            face_image_path TEXT NOT NULL,
+            angle_description TEXT,
+            capture_order INTEGER,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (student_db_id) REFERENCES students(id) ON DELETE CASCADE
+        )
+    ''')
+    
     # Visit logs table - tracks canteen visits
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS visit_logs (
@@ -136,6 +151,84 @@ def get_student_by_id(student_id: str) -> Optional[dict]:
         return student
     return None
 
+def add_student_face_images(student_db_id: int, student_id: str, 
+                           face_data_list: List[dict]) -> bool:
+    """
+    Add multiple face images for a student
+    face_data_list: List of dicts with keys: 'embedding', 'image_path', 'angle_description', 'order'
+    """
+    try:
+        conn = get_connection()
+        cursor = conn.cursor()
+        
+        for face_data in face_data_list:
+            embedding_json = json.dumps(face_data['embedding'].tolist())
+            cursor.execute('''
+                INSERT INTO face_images (student_db_id, student_id, face_embedding, 
+                                        face_image_path, angle_description, capture_order)
+                VALUES (?, ?, ?, ?, ?, ?)
+            ''', (student_db_id, student_id, embedding_json, 
+                  face_data['image_path'], face_data['angle_description'], 
+                  face_data['order']))
+        
+        conn.commit()
+        conn.close()
+        print(f"Added {len(face_data_list)} face images for student {student_id}")
+        return True
+    except Exception as e:
+        print(f"Error adding face images: {e}")
+        return False
+
+def get_student_face_images(student_id: str) -> List[dict]:
+    """Get all face images for a student"""
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    cursor.execute('''
+        SELECT * FROM face_images 
+        WHERE student_id = ? 
+        ORDER BY capture_order
+    ''', (student_id,))
+    rows = cursor.fetchall()
+    
+    face_images = []
+    for row in rows:
+        face_img = dict(row)
+        if face_img['face_embedding']:
+            face_img['face_embedding'] = np.array(json.loads(face_img['face_embedding']))
+        face_images.append(face_img)
+    
+    conn.close()
+    return face_images
+
+def delete_student_face_images(student_id: str) -> bool:
+    """Delete all face images for a student"""
+    try:
+        conn = get_connection()
+        cursor = conn.cursor()
+        
+        # Get image paths first to delete files
+        cursor.execute('SELECT face_image_path FROM face_images WHERE student_id = ?', (student_id,))
+        paths = cursor.fetchall()
+        
+        # Delete files
+        for path_row in paths:
+            try:
+                if os.path.exists(path_row[0]):
+                    os.remove(path_row[0])
+            except:
+                pass
+        
+        # Delete from database
+        cursor.execute('DELETE FROM face_images WHERE student_id = ?', (student_id,))
+        
+        conn.commit()
+        conn.close()
+        return True
+    except Exception as e:
+        print(f"Error deleting face images: {e}")
+        return False
+
 def update_student(student_id: str, name: str = None, department: str = None, 
                    year: int = None, face_embedding: np.ndarray = None, 
                    face_image_path: str = None) -> bool:
@@ -179,15 +272,20 @@ def update_student(student_id: str, name: str = None, department: str = None,
         return False
 
 def delete_student(student_id: str) -> bool:
-    """Delete student from database"""
+    """Delete student from database including all face images"""
     try:
         conn = get_connection()
         cursor = conn.cursor()
         
+        # First delete all associated face images
+        delete_student_face_images(student_id)
+        
+        # Delete the student record
         cursor.execute('DELETE FROM students WHERE student_id = ?', (student_id,))
         
         conn.commit()
         conn.close()
+        print(f"Student {student_id} deleted successfully")
         return True
     except Exception as e:
         print(f"Error deleting student: {e}")
