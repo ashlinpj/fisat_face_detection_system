@@ -374,22 +374,57 @@ class CanteenFaceDetectionGUI:
             self.start_detection()
     
     def start_detection(self):
-        """Start live detection"""
+        """Start live detection (webcam or RTSP)"""
         if self.face_system is None:
             messagebox.showerror("Error", "System not initialized yet!")
             return
         
-        self.cap = cv2.VideoCapture(config.CAMERA_INDEX)
-        self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, config.FRAME_WIDTH)
-        self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, config.FRAME_HEIGHT)
-        
-        if not self.cap.isOpened():
-            messagebox.showerror("Error", "Could not open camera!")
-            return
+        if config.USE_RTSP:
+            # RTSP Stream mode
+            os.environ["OPENCV_FFMPEG_CAPTURE_OPTIONS"] = "rtsp_transport;tcp"
+            
+            for attempt in range(config.RTSP_RECONNECT_ATTEMPTS):
+                self.cap = cv2.VideoCapture(config.RTSP_URL, cv2.CAP_FFMPEG)
+                self.cap.set(cv2.CAP_PROP_BUFFERSIZE, config.RTSP_BUFFER_SIZE)
+                # Disable internal auto-exposure/gain adjustments that can degrade quality
+                self.cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*'H264'))
+                
+                if self.cap.isOpened():
+                    ret, test_frame = self.cap.read()
+                    if ret:
+                        break
+                
+                if attempt < config.RTSP_RECONNECT_ATTEMPTS - 1:
+                    import time
+                    time.sleep(config.RTSP_RECONNECT_DELAY)
+            
+            if not self.cap.isOpened():
+                messagebox.showerror(
+                    "RTSP Error",
+                    f"Could not connect to RTSP stream!\n\nURL: {config.RTSP_URL}\n\n"
+                    f"Please check:\n"
+                    f"1. RTSP server is running (e.g., OBS)\n"
+                    f"2. RTSP URL is correct\n"
+                    f"3. Firewall is not blocking connection\n\n"
+                    f"To use webcam: Set USE_RTSP = False in config.py"
+                )
+                return
+        else:
+            # Webcam mode
+            self.cap = cv2.VideoCapture(config.CAMERA_INDEX)
+            self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, config.FRAME_WIDTH)
+            self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, config.FRAME_HEIGHT)
+            
+            if not self.cap.isOpened():
+                messagebox.showerror("Error", "Could not open camera!")
+                return
         
         self.is_running = True
         self.start_btn.config(text="⏹ Stop Detection")
-        self.update_status("🟢 Detection Running", "green")
+        if config.USE_RTSP:
+            self.update_status(f"🟢 RTSP Stream Active", "green")
+        else:
+            self.update_status("🟢 Detection Running", "green")
         
         self.video_thread = threading.Thread(target=self.video_loop, daemon=True)
         self.video_thread.start()
@@ -409,11 +444,38 @@ class CanteenFaceDetectionGUI:
         frame_count = 0
         start_time = time.time()
         fps = 0
+        failed_reads = 0
+        max_failed_reads = 30
         
         while self.is_running:
             ret, frame = self.cap.read()
             if not ret:
-                break
+                failed_reads += 1
+                
+                # Try to reconnect RTSP stream
+                if config.USE_RTSP and failed_reads >= max_failed_reads:
+                    self.root.after(0, lambda: self.update_status("🟡 Reconnecting RTSP...", "orange"))
+                    if self.cap:
+                        self.cap.release()
+                    time.sleep(2)
+                    
+                    self.cap = cv2.VideoCapture(config.RTSP_URL, cv2.CAP_FFMPEG)
+                    self.cap.set(cv2.CAP_PROP_BUFFERSIZE, config.RTSP_BUFFER_SIZE)
+                    failed_reads = 0
+                    
+                    if self.cap.isOpened():
+                        self.root.after(0, lambda: self.update_status("🟢 RTSP Reconnected", "green"))
+                        continue
+                    else:
+                        self.root.after(0, lambda: messagebox.showerror("Error", "RTSP stream lost and reconnection failed!"))
+                        break
+                elif failed_reads >= max_failed_reads:
+                    break
+                
+                time.sleep(0.1)
+                continue
+            
+            failed_reads = 0
             
             self.current_frame = frame.copy()
             
@@ -431,14 +493,15 @@ class CanteenFaceDetectionGUI:
             # Convert for display
             annotated_frame = cv2.cvtColor(annotated_frame, cv2.COLOR_BGR2RGB)
             
-            # Resize for display
-            display_width = 800
+            # Resize for display - smaller size for better screen fit
+            # Use INTER_LINEAR for better quality when downscaling
+            display_width = 640
             h, w = annotated_frame.shape[:2]
             scale = display_width / w
             display_height = int(h * scale)
-            annotated_frame = cv2.resize(annotated_frame, (display_width, display_height))
+            annotated_frame = cv2.resize(annotated_frame, (display_width, display_height), interpolation=cv2.INTER_LINEAR)
             
-            # Convert to PhotoImage
+            # Convert to PhotoImage with high quality
             img = Image.fromarray(annotated_frame)
             imgtk = ImageTk.PhotoImage(image=img)
             

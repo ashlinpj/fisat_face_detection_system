@@ -432,7 +432,7 @@ class FaceRecognitionSystem:
         
         # Fallback: Fast Haar Cascade detection
         scale = getattr(config, 'DETECTION_SCALE', 0.5)
-        small_frame = cv2.resize(frame, None, fx=scale, fy=scale)
+        small_frame = cv2.resize(frame, None, fx=scale, fy=scale, interpolation=cv2.INTER_LINEAR)
         gray = cv2.cvtColor(small_frame, cv2.COLOR_BGR2GRAY)
         
         faces = self.face_cascade.detectMultiScale(
@@ -483,7 +483,7 @@ class FaceRecognitionSystem:
                 return None
             
             # Resize for consistent results
-            face_resized = cv2.resize(face_image, (160, 160))
+            face_resized = cv2.resize(face_image, (160, 160), interpolation=cv2.INTER_LINEAR)
             
             # Get embedding - skip detection since we already have face
             embedding = DeepFace.represent(

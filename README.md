@@ -10,6 +10,8 @@ A real-time face detection and recognition system designed to track student visi
 
 - **Real-time Face Detection** using YOLOv8 and DeepFace
 - **Face Recognition** to identify registered students
+- **RTSP Stream Support** - Use network cameras or OBS streams
+- **Automatic Reconnection** for RTSP streams
 - **Automatic Visit Logging** with date, time, and duration tracking
 - **Student Registration** with face capture
 - **Unknown Face Detection** for identifying unregistered visitors
@@ -65,7 +67,7 @@ fisat_face_detection_system/
 ### Prerequisites
 
 - Python 3.10 or higher
-- Webcam/USB Camera
+- Webcam/USB Camera or RTSP Stream (e.g., from OBS, IP Camera)
 - Windows/Linux/MacOS
 
 ### Step 1: Clone or Download
@@ -189,7 +191,43 @@ system.register_new_student(
 
 ---
 
-## 📊 Database Schema
+## � RTSP Stream Support
+
+The system now supports RTSP streams from network cameras, OBS, and other RTSP sources!
+
+### Quick Setup with OBS
+
+1. **Install OBS Studio** and the **RTSP Server Plugin**
+2. **Configure RTSP** in OBS (Tools → RTSP Server Settings)
+3. **Update config.py:**
+   ```python
+   USE_RTSP = True
+   RTSP_URL = "rtsp://127.0.0.1:8554/live"
+   ```
+4. **Run the application** - It will connect to the RTSP stream automatically!
+
+### Test Your RTSP Connection
+
+```bash
+python test_rtsp.py
+```
+
+### Full Setup Guides
+
+- 📖 **Quick Start:** See [RTSP_QUICK_START.md](RTSP_QUICK_START.md) - 5-minute setup
+- 📚 **Complete Guide:** See [RTSP_SETUP_GUIDE.md](RTSP_SETUP_GUIDE.md) - Full documentation
+
+### RTSP Features
+
+- ✅ Automatic reconnection on connection loss
+- ✅ Support for IP cameras with authentication
+- ✅ Low-latency streaming with TCP/UDP
+- ✅ Configurable buffer size and reconnection attempts
+- ✅ Easy switching between webcam and RTSP
+
+---
+
+## �📊 Database Schema
 
 ### Students Table
 

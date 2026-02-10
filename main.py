@@ -42,22 +42,60 @@ class CanteenFaceDetectionApp:
         print("-" * 60)
     
     def start_camera(self):
-        """Start the camera capture"""
-        self.cap = cv2.VideoCapture(config.CAMERA_INDEX)
-        self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, config.FRAME_WIDTH)
-        self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, config.FRAME_HEIGHT)
-        self.cap.set(cv2.CAP_PROP_FPS, config.FPS)
-        
-        if not self.cap.isOpened():
-            print("ERROR: Could not open camera!")
+        """Start the camera capture (webcam or RTSP stream)"""
+        if config.USE_RTSP:
+            # RTSP Stream mode
+            print(f"Connecting to RTSP stream: {config.RTSP_URL}")
+            
+            # Set RTSP options for better performance
+            os.environ["OPENCV_FFMPEG_CAPTURE_OPTIONS"] = "rtsp_transport;tcp"
+            
+            for attempt in range(config.RTSP_RECONNECT_ATTEMPTS):
+                self.cap = cv2.VideoCapture(config.RTSP_URL, cv2.CAP_FFMPEG)
+                
+                # Set buffer size to reduce latency
+                self.cap.set(cv2.CAP_PROP_BUFFERSIZE, config.RTSP_BUFFER_SIZE)
+                # Set codec for better quality
+                self.cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*'H264'))
+                
+                if self.cap.isOpened():
+                    # Test if we can read a frame
+                    ret, test_frame = self.cap.read()
+                    if ret:
+                        print(f"✓ RTSP stream connected successfully!")
+                        print(f"  Stream: {config.RTSP_URL}")
+                        print(f"  Resolution: {int(self.cap.get(cv2.CAP_PROP_FRAME_WIDTH))}x{int(self.cap.get(cv2.CAP_PROP_FRAME_HEIGHT))}")
+                        return True
+                
+                print(f"  Attempt {attempt + 1}/{config.RTSP_RECONNECT_ATTEMPTS} failed...")
+                if attempt < config.RTSP_RECONNECT_ATTEMPTS - 1:
+                    time.sleep(config.RTSP_RECONNECT_DELAY)
+            
+            print("\nERROR: Could not connect to RTSP stream!")
             print("Please check:")
-            print("  1. Camera is connected")
-            print("  2. Camera is not being used by another application")
-            print(f"  3. Camera index is correct (current: {config.CAMERA_INDEX})")
+            print("  1. RTSP server is running (e.g., OBS with RTSP output)")
+            print("  2. RTSP URL is correct")
+            print(f"  3. Current URL: {config.RTSP_URL}")
+            print("  4. Firewall is not blocking the connection")
+            print("\nTip: To use webcam instead, set USE_RTSP = False in config.py")
             return False
-        
-        print(f"Camera opened successfully (Index: {config.CAMERA_INDEX})")
-        return True
+        else:
+            # Webcam mode
+            self.cap = cv2.VideoCapture(config.CAMERA_INDEX)
+            self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, config.FRAME_WIDTH)
+            self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, config.FRAME_HEIGHT)
+            self.cap.set(cv2.CAP_PROP_FPS, config.FPS)
+            
+            if not self.cap.isOpened():
+                print("ERROR: Could not open camera!")
+                print("Please check:")
+                print("  1. Camera is connected")
+                print("  2. Camera is not being used by another application")
+                print(f"  3. Camera index is correct (current: {config.CAMERA_INDEX})")
+                return False
+            
+            print(f"✓ Camera opened successfully (Index: {config.CAMERA_INDEX})")
+            return True
     
     def stop_camera(self):
         """Stop the camera capture"""
@@ -86,14 +124,46 @@ class CanteenFaceDetectionApp:
         print("  [SPACE] - Capture screenshot")
         print("-" * 60)
         
+        # Track consecutive failed reads for RTSP reconnection
+        failed_reads = 0
+        max_failed_reads = 30  # Try to reconnect after 30 consecutive failures
+        
         while self.is_running:
             ret, frame = self.cap.read()
             if not ret:
-                print("Error: Could not read frame from camera")
-                break
+                failed_reads += 1
+                print(f"Warning: Could not read frame from camera (attempt {failed_reads})")
+                
+                # If using RTSP and multiple failures, try to reconnect
+                if config.USE_RTSP and failed_reads >= max_failed_reads:
+                    print("\nRTSP stream lost. Attempting to reconnect...")
+                    self.stop_camera()
+                    time.sleep(2)
+                    if not self.start_camera():
+                        print("Failed to reconnect. Exiting...")
+                        break
+                    failed_reads = 0
+                    continue
+                elif failed_reads >= max_failed_reads:
+                    print("Too many failed reads. Exiting...")
+                    break
+                
+                time.sleep(0.1)
+                continue
+            
+            # Reset failed reads counter on successful frame
+            failed_reads = 0
             
             # Process frame
             annotated_frame, recognized_people = self.face_system.process_frame(frame)
+            
+            # Resize frame for display to fit on screen with high quality
+            display_height = 600  # Maximum height for display
+            h, w = annotated_frame.shape[:2]
+            if h > display_height:
+                scale = display_height / h
+                display_width = int(w * scale)
+                annotated_frame = cv2.resize(annotated_frame, (display_width, display_height), interpolation=cv2.INTER_LINEAR)
             
             # Calculate FPS
             frame_count += 1
