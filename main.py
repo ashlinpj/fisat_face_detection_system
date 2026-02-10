@@ -42,8 +42,55 @@ class CanteenFaceDetectionApp:
         print("-" * 60)
     
     def start_camera(self):
-        """Start the camera capture (webcam or RTSP stream)"""
-        if config.USE_RTSP:
+        """Start the camera capture (webcam, RTSP stream, or YouTube stream)"""
+        # YouTube Stream mode (checked first)
+        if config.USE_YOUTUBE:
+            print(f"Connecting to YouTube stream: {config.YOUTUBE_URL}")
+            
+            for attempt in range(config.YOUTUBE_RECONNECT_ATTEMPTS):
+                try:
+                    import yt_dlp
+                    
+                    ydl_opts = {
+                        'format': config.YOUTUBE_QUALITY,
+                        'quiet': True,
+                        'no_warnings': True,
+                    }
+                    
+                    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                        info = ydl.extract_info(config.YOUTUBE_URL, download=False)
+                        stream_url = info['url']
+                    
+                    print(f"  Extracted stream URL from YouTube...")
+                    self.cap = cv2.VideoCapture(stream_url, cv2.CAP_FFMPEG)
+                    
+                    if self.cap.isOpened():
+                        ret, test_frame = self.cap.read()
+                        if ret:
+                            print(f"✓ YouTube stream connected successfully!")
+                            print(f"  Title: {info.get('title', 'Unknown')}")
+                            print(f"  Resolution: {int(self.cap.get(cv2.CAP_PROP_FRAME_WIDTH))}x{int(self.cap.get(cv2.CAP_PROP_FRAME_HEIGHT))}")
+                            return True
+                    
+                    print(f"  Attempt {attempt + 1}/{config.YOUTUBE_RECONNECT_ATTEMPTS} failed...")
+                    if attempt < config.YOUTUBE_RECONNECT_ATTEMPTS - 1:
+                        time.sleep(config.YOUTUBE_RECONNECT_DELAY)
+                        
+                except Exception as e:
+                    print(f"  Error: {str(e)}")
+                    if attempt < config.YOUTUBE_RECONNECT_ATTEMPTS - 1:
+                        time.sleep(config.YOUTUBE_RECONNECT_DELAY)
+            
+            print("\nERROR: Could not connect to YouTube stream!")
+            print("Please check:")
+            print("  1. YouTube URL is correct and accessible")
+            print(f"  2. Current URL: {config.YOUTUBE_URL}")
+            print("  3. Internet connection is stable")
+            print("  4. yt-dlp is installed (pip install yt-dlp)")
+            print("\nTip: To use webcam instead, set USE_YOUTUBE = False in config.py")
+            return False
+        
+        elif config.USE_RTSP:
             # RTSP Stream mode
             print(f"Connecting to RTSP stream: {config.RTSP_URL}")
             

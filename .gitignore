@@ -21,4 +21,4 @@ screenshots/
 
 # Environment
 .env
-venv/
+myenv/

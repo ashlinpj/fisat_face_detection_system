@@ -374,12 +374,55 @@ class CanteenFaceDetectionGUI:
             self.start_detection()
     
     def start_detection(self):
-        """Start live detection (webcam or RTSP)"""
+        """Start live detection (webcam, RTSP, or YouTube stream)"""
         if self.face_system is None:
             messagebox.showerror("Error", "System not initialized yet!")
             return
         
-        if config.USE_RTSP:
+        # YouTube Stream mode (checked first)
+        if config.USE_YOUTUBE:
+            import time
+            for attempt in range(config.YOUTUBE_RECONNECT_ATTEMPTS):
+                try:
+                    import yt_dlp
+                    
+                    ydl_opts = {
+                        'format': config.YOUTUBE_QUALITY,
+                        'quiet': True,
+                        'no_warnings': True,
+                    }
+                    
+                    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                        info = ydl.extract_info(config.YOUTUBE_URL, download=False)
+                        stream_url = info['url']
+                    
+                    self.cap = cv2.VideoCapture(stream_url, cv2.CAP_FFMPEG)
+                    
+                    if self.cap.isOpened():
+                        ret, test_frame = self.cap.read()
+                        if ret:
+                            break
+                    
+                    if attempt < config.YOUTUBE_RECONNECT_ATTEMPTS - 1:
+                        time.sleep(config.YOUTUBE_RECONNECT_DELAY)
+                        
+                except Exception as e:
+                    if attempt < config.YOUTUBE_RECONNECT_ATTEMPTS - 1:
+                        time.sleep(config.YOUTUBE_RECONNECT_DELAY)
+            
+            if not self.cap or not self.cap.isOpened():
+                messagebox.showerror(
+                    "YouTube Error",
+                    f"Could not connect to YouTube stream!\n\nURL: {config.YOUTUBE_URL}\n\n"
+                    f"Please check:\n"
+                    f"1. YouTube URL is correct and accessible\n"
+                    f"2. Internet connection is stable\n"
+                    f"3. yt-dlp is installed\n\n"
+                    f"To use webcam: Set USE_YOUTUBE = False in config.py"
+                )
+                return
+        
+        elif config.USE_RTSP:
             # RTSP Stream mode
             os.environ["OPENCV_FFMPEG_CAPTURE_OPTIONS"] = "rtsp_transport;tcp"
             
@@ -421,7 +464,9 @@ class CanteenFaceDetectionGUI:
         
         self.is_running = True
         self.start_btn.config(text="⏹ Stop Detection")
-        if config.USE_RTSP:
+        if config.USE_YOUTUBE:
+            self.update_status(f"🟢 YouTube Stream Active", "green")
+        elif config.USE_RTSP:
             self.update_status(f"🟢 RTSP Stream Active", "green")
         else:
             self.update_status("🟢 Detection Running", "green")
@@ -451,7 +496,38 @@ class CanteenFaceDetectionGUI:
             ret, frame = self.cap.read()
             if not ret:
                 failed_reads += 1
+                if config.USE_YOUTUBE and failed_reads >= max_failed_reads:
+                    self.root.after(0, lambda: self.update_status("🟡 Reconnecting YouTube...", "orange"))
+                    if self.cap:
+                        self.cap.release()
+                    time.sleep(2)
+                    
+                    try:
+                        import yt_dlp
+                        ydl_opts = {
+                            'format': config.YOUTUBE_QUALITY,
+                            'quiet': True,
+                            'no_warnings': True,
+                        }
+                        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                            info = ydl.extract_info(config.YOUTUBE_URL, download=False)
+                            stream_url = info['url']
+                        
+                        self.cap = cv2.VideoCapture(stream_url, cv2.CAP_FFMPEG)
+                        failed_reads = 0
+                        
+                        if self.cap.isOpened():
+                            self.root.after(0, lambda: self.update_status("🟢 YouTube Reconnected", "green"))
+                            continue
+                        else:
+                            self.root.after(0, lambda: messagebox.showerror("Error", "YouTube stream lost and reconnection failed!"))
+                            break
+                    except Exception as e:
+                        self.root.after(0, lambda: messagebox.showerror("Error", f"YouTube stream error: {str(e)}"))
+                        break
                 
+                # Try to reconnect RTSP stream
+                el
                 # Try to reconnect RTSP stream
                 if config.USE_RTSP and failed_reads >= max_failed_reads:
                     self.root.after(0, lambda: self.update_status("🟡 Reconnecting RTSP...", "orange"))

@@ -16,6 +16,9 @@ tensorflow>=2.13.0
 # GUI
 tk>=0.1.0
 
+# YouTube Stream Support
+yt-dlp>=2023.0.0
+
 # Database (built-in with Python, just for reference)
 # sqlite3 - included in Python standard library
 
