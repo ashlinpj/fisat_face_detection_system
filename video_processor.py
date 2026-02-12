@@ -34,6 +34,7 @@ from typing import List, Tuple, Optional, Dict, Any
 import config
 import database
 from face_recognition_module import FaceRecognitionSystem
+from face_matcher import find_best_match, cosine_similarity
 
 # ── Accuracy knobs (also settable in config.py) ──────────────────────
 MIN_CONSECUTIVE_FRAMES = getattr(config, "VIDEO_MIN_CONSECUTIVE_FRAMES", 5)
@@ -190,12 +191,15 @@ class VideoProcessorQueue:
 
     @staticmethod
     def _bbox_iou(a, b) -> float:
-        ax1, ay1, aw, ah = a;  bx1, by1, bw, bh = b
-        ax2, ay2 = ax1 + aw, ay1 + ah;  bx2, by2 = bx1 + bw, by1 + bh
+        """IoU for (x1, y1, x2, y2) format bboxes."""
+        ax1, ay1, ax2, ay2 = a
+        bx1, by1, bx2, by2 = b
         ix1 = max(ax1, bx1); iy1 = max(ay1, by1)
         ix2 = min(ax2, bx2); iy2 = min(ay2, by2)
         inter = max(0, ix2 - ix1) * max(0, iy2 - iy1)
-        union = aw * ah + bw * bh - inter
+        area_a = (ax2 - ax1) * (ay2 - ay1)
+        area_b = (bx2 - bx1) * (by2 - by1)
+        union = area_a + area_b - inter
         return inter / union if union > 0 else 0.0
 
     # ── core processing (headless-safe) ───────────────────────────
@@ -289,10 +293,18 @@ class VideoProcessorQueue:
 
                 self.current_video_stats["faces_detected"] += len(faces)
                 matched_tracks = set()
+                img_h, img_w = frame.shape[:2]
 
                 for bbox in faces:
-                    x, y, w, h = bbox
-                    face_crop = frame[y:y+h, x:x+w]
+                    x1, y1, x2, y2 = bbox
+
+                    # Crop with padding (same as webcam process_frame)
+                    pad = int((x2 - x1) * 0.3)
+                    cx1 = max(0, x1 - pad)
+                    cy1 = max(0, y1 - pad)
+                    cx2 = min(img_w, x2 + pad)
+                    cy2 = min(img_h, y2 + pad)
+                    face_crop = frame[cy1:cy2, cx1:cx2]
                     if face_crop.size == 0:
                         continue
 
@@ -303,9 +315,34 @@ class VideoProcessorQueue:
                         })
                         continue
 
-                    # Recognize
-                    student, confidence = self.face_system.recognize_face(face_crop)
-                    conf_val = float(confidence) if confidence else 0.0
+                    # Enhance face (same as webcam pipeline)
+                    face_enhanced = self.face_system.enhance_face(face_crop)
+
+                    # ── Same recognition logic as live detection thread ──
+                    # Step 1: get embedding from enhanced face
+                    embedding = self.face_system.get_face_embedding(face_enhanced)
+                    if embedding is None:
+                        frame_face_data.append({
+                            "bbox": bbox, "name": "Unknown", "status": "unknown",
+                            "confidence": 0.0,
+                        })
+                        continue
+
+                    # Step 2: find_best_match with margin (same as recognition_worker)
+                    rec_threshold = getattr(config, 'FACE_RECOGNITION_THRESHOLD', 0.35)
+                    best_match = find_best_match(
+                        embedding,
+                        self.face_system.known_faces,
+                        threshold=rec_threshold,
+                        margin=0.15,
+                    )
+
+                    # Step 3: compute cosine similarity score
+                    conf_val = 0.0
+                    if best_match is not None and best_match.get('face_embedding') is not None:
+                        conf_val = cosine_similarity(embedding, best_match['face_embedding'])
+
+                    student = best_match
 
                     if student is not None and conf_val >= CONFIDENCE_FLOOR:
                         pred_id = student.get("student_id", "Unknown")

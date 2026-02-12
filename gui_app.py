@@ -1196,9 +1196,9 @@ class CanteenFaceDetectionGUI:
         faces = snapshot.get("faces", [])
         annotated = frame.copy()
 
-        # Draw bounding boxes
+        # Draw bounding boxes  (bbox is x1,y1,x2,y2)
         for fdata in faces:
-            x, y, w, h = fdata["bbox"]
+            x1, y1, x2, y2 = fdata["bbox"]
             status = fdata.get("status", "unknown")
             name = fdata.get("name", "")
             conf = fdata.get("confidence", 0)
@@ -1210,13 +1210,18 @@ class CanteenFaceDetectionGUI:
             else:
                 color = (0, 0, 255)  # red
 
-            cv2.rectangle(annotated, (x, y), (x + w, y + h), color, 2)
+            cv2.rectangle(annotated, (x1, y1), (x2, y2), color, 2)
 
             label = f"{name}"
             if conf > 0:
                 label += f" {conf:.0%}"
-            cv2.putText(annotated, label, (x, y - 8),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.55, color, 2)
+            # Label with background for readability
+            label_sz, baseline = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.55, 2)
+            lbl_y = max(y1, label_sz[1] + 10)
+            cv2.rectangle(annotated, (x1, lbl_y - label_sz[1] - 6),
+                          (x1 + label_sz[0], lbl_y + 2), color, -1)
+            cv2.putText(annotated, label, (x1, lbl_y - 2),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.55, (255, 255, 255), 2)
 
         # Convert BGR -> RGB -> PIL -> PhotoImage
         annotated = cv2.cvtColor(annotated, cv2.COLOR_BGR2RGB)
