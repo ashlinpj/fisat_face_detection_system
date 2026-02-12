@@ -77,8 +77,26 @@ VIDEO_SUPPORTED_FORMATS = ['.mp4', '.avi', '.mov', '.mkv', '.flv']  # Supported 
 VIDEO_AUTO_WAIT_ENABLED = True  # Automatically wait and rescan when no videos found
 VIDEO_WAIT_INTERVAL = 60  # Seconds to wait before rescanning empty folder
 
+# ── Shared Folder / Network Queue settings ──
+# Watch folder where another PC drops 10-minute .mp4 segments
+VIDEO_WATCH_FOLDER = r"C:\cctv_storage\cam1"
+# Internal working directories (auto-created)
+VIDEO_PROCESSING_DIR = os.path.join(BASE_DIR, "processing")
+VIDEO_ERROR_DIR = os.path.join(BASE_DIR, "error")
+# File stability: file must not change size for this many seconds before processing
+VIDEO_STABILITY_WAIT_SECONDS = 60
+# How often to re-check file size during stability wait (seconds)
+VIDEO_STABILITY_CHECK_INTERVAL = 10
+# How often to scan the watch folder when idle (seconds)
+VIDEO_SCAN_INTERVAL = 60
+
 # ── Accuracy / Voting settings ──
-VIDEO_MIN_CONSECUTIVE_FRAMES = 3   # Must see same person N frames in a row
+VIDEO_MIN_CONSECUTIVE_FRAMES = 10 # Must see same person N frames in a row (was 3)
 VIDEO_BLUR_THRESHOLD = 80.0        # Laplacian variance below this → skip blurry face
 VIDEO_VOTE_RATIO = 0.40            # ≥40 % of track votes for identity to confirm
 VIDEO_CONFIDENCE_FLOOR = 0.50      # Ignore recognitions below this confidence
+VIDEO_RECOGNITION_THRESHOLD = 0.38 # DeepFace cosine distance threshold
+
+# ── Video Tab Visualization settings ──
+VIDEO_PREVIEW_FPS = 5              # Max FPS for GUI frame preview (avoid lag)
+VIDEO_PREVIEW_WIDTH = 640          # Preview display width in pixels
