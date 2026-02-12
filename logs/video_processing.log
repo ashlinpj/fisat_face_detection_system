@@ -1,277 +1,217 @@
-[2026-02-12 13:02:13] INFO: Video Processor Queue initialized
-[2026-02-12 13:02:17] INFO: Face recognition system linked to video processor
-[2026-02-12 13:03:09] INFO: Video uploaded: vid1.mp4
-[2026-02-12 13:03:18] INFO: Face recognition system linked to video processor
-[2026-02-12 13:03:18] INFO: Entering video processing loop...
-[2026-02-12 13:03:18] INFO: Video processing started
-[2026-02-12 13:03:18] INFO: ============================================================
-[2026-02-12 13:03:18] INFO: Processing video: vid1.mp4
-[2026-02-12 13:03:18] INFO: Duration: 00:00:11
-[2026-02-12 13:03:18] INFO: FPS: 29.80
-[2026-02-12 13:03:18] INFO: Resolution: 478x850
-[2026-02-12 13:03:18] INFO: Total frames: 349
-[2026-02-12 13:03:20] ERROR: Error processing video: unhashable type: 'dict'
-[2026-02-12 13:03:20] ERROR: Traceback (most recent call last):
-  File "C:\Users\benso\OneDrive\Desktop\desktop\folder (4)\fisat_face_detection_system\video_processor.py", line 270, in process_video
-    if name in last_recognition:
-       ^^^^^^^^^^^^^^^^^^^^^^^^
-TypeError: unhashable type: 'dict'
-
-[2026-02-12 13:03:20] WARNING: Failed to process: vid1.mp4
-[2026-02-12 13:03:22] INFO: ============================================================
-[2026-02-12 13:03:22] INFO: Processing video: vid1.mp4
-[2026-02-12 13:03:22] INFO: Duration: 00:00:11
-[2026-02-12 13:03:22] INFO: FPS: 29.80
-[2026-02-12 13:03:22] INFO: Resolution: 478x850
-[2026-02-12 13:03:22] INFO: Total frames: 349
-[2026-02-12 13:03:23] ERROR: Error processing video: unhashable type: 'dict'
-[2026-02-12 13:03:23] ERROR: Traceback (most recent call last):
-  File "C:\Users\benso\OneDrive\Desktop\desktop\folder (4)\fisat_face_detection_system\video_processor.py", line 270, in process_video
-    if name in last_recognition:
-       ^^^^^^^^^^^^^^^^^^^^^^^^
-TypeError: unhashable type: 'dict'
-
-[2026-02-12 13:03:23] WARNING: Failed to process: vid1.mp4
-[2026-02-12 13:03:25] INFO: ============================================================
-[2026-02-12 13:03:25] INFO: Processing video: vid1.mp4
-[2026-02-12 13:03:25] INFO: Duration: 00:00:11
-[2026-02-12 13:03:25] INFO: FPS: 29.80
-[2026-02-12 13:03:25] INFO: Resolution: 478x850
-[2026-02-12 13:03:25] INFO: Total frames: 349
-[2026-02-12 13:03:25] ERROR: Error processing video: unhashable type: 'dict'
-[2026-02-12 13:03:25] ERROR: Traceback (most recent call last):
-  File "C:\Users\benso\OneDrive\Desktop\desktop\folder (4)\fisat_face_detection_system\video_processor.py", line 270, in process_video
-    if name in last_recognition:
-       ^^^^^^^^^^^^^^^^^^^^^^^^
-TypeError: unhashable type: 'dict'
-
-[2026-02-12 13:03:25] WARNING: Failed to process: vid1.mp4
-[2026-02-12 13:03:27] INFO: ============================================================
-[2026-02-12 13:03:27] INFO: Processing video: vid1.mp4
-[2026-02-12 13:03:27] INFO: Duration: 00:00:11
-[2026-02-12 13:03:27] INFO: FPS: 29.80
-[2026-02-12 13:03:27] INFO: Resolution: 478x850
-[2026-02-12 13:03:27] INFO: Total frames: 349
-[2026-02-12 13:03:28] ERROR: Error processing video: unhashable type: 'dict'
-[2026-02-12 13:03:28] ERROR: Traceback (most recent call last):
-  File "C:\Users\benso\OneDrive\Desktop\desktop\folder (4)\fisat_face_detection_system\video_processor.py", line 270, in process_video
-    if name in last_recognition:
-       ^^^^^^^^^^^^^^^^^^^^^^^^
-TypeError: unhashable type: 'dict'
-
-[2026-02-12 13:03:28] WARNING: Failed to process: vid1.mp4
-[2026-02-12 13:03:30] INFO: ============================================================
-[2026-02-12 13:03:30] INFO: Processing video: vid1.mp4
-[2026-02-12 13:03:30] INFO: Duration: 00:00:11
-[2026-02-12 13:03:30] INFO: FPS: 29.80
-[2026-02-12 13:03:30] INFO: Resolution: 478x850
-[2026-02-12 13:03:30] INFO: Total frames: 349
-[2026-02-12 13:03:30] ERROR: Error processing video: unhashable type: 'dict'
-[2026-02-12 13:03:30] ERROR: Traceback (most recent call last):
-  File "C:\Users\benso\OneDrive\Desktop\desktop\folder (4)\fisat_face_detection_system\video_processor.py", line 270, in process_video
-    if name in last_recognition:
-       ^^^^^^^^^^^^^^^^^^^^^^^^
-TypeError: unhashable type: 'dict'
-
-[2026-02-12 13:03:30] WARNING: Failed to process: vid1.mp4
-[2026-02-12 13:03:32] INFO: ============================================================
-[2026-02-12 13:03:32] INFO: Processing video: vid1.mp4
-[2026-02-12 13:03:32] INFO: Duration: 00:00:11
-[2026-02-12 13:03:32] INFO: FPS: 29.80
-[2026-02-12 13:03:32] INFO: Resolution: 478x850
-[2026-02-12 13:03:32] INFO: Total frames: 349
-[2026-02-12 13:03:32] ERROR: Error processing video: unhashable type: 'dict'
-[2026-02-12 13:03:32] ERROR: Traceback (most recent call last):
-  File "C:\Users\benso\OneDrive\Desktop\desktop\folder (4)\fisat_face_detection_system\video_processor.py", line 270, in process_video
-    if name in last_recognition:
-       ^^^^^^^^^^^^^^^^^^^^^^^^
-TypeError: unhashable type: 'dict'
-
-[2026-02-12 13:03:32] WARNING: Failed to process: vid1.mp4
-[2026-02-12 13:03:34] INFO: ============================================================
-[2026-02-12 13:03:34] INFO: Processing video: vid1.mp4
-[2026-02-12 13:03:34] INFO: Duration: 00:00:11
-[2026-02-12 13:03:34] INFO: FPS: 29.80
-[2026-02-12 13:03:34] INFO: Resolution: 478x850
-[2026-02-12 13:03:34] INFO: Total frames: 349
-[2026-02-12 13:03:35] ERROR: Error processing video: unhashable type: 'dict'
-[2026-02-12 13:03:35] ERROR: Traceback (most recent call last):
-  File "C:\Users\benso\OneDrive\Desktop\desktop\folder (4)\fisat_face_detection_system\video_processor.py", line 270, in process_video
-    if name in last_recognition:
-       ^^^^^^^^^^^^^^^^^^^^^^^^
-TypeError: unhashable type: 'dict'
-
-[2026-02-12 13:03:35] WARNING: Failed to process: vid1.mp4
-[2026-02-12 13:03:37] INFO: ============================================================
-[2026-02-12 13:03:37] INFO: Processing video: vid1.mp4
-[2026-02-12 13:03:37] INFO: Duration: 00:00:11
-[2026-02-12 13:03:37] INFO: FPS: 29.80
-[2026-02-12 13:03:37] INFO: Resolution: 478x850
-[2026-02-12 13:03:37] INFO: Total frames: 349
-[2026-02-12 13:03:37] ERROR: Error processing video: unhashable type: 'dict'
-[2026-02-12 13:03:37] ERROR: Traceback (most recent call last):
-  File "C:\Users\benso\OneDrive\Desktop\desktop\folder (4)\fisat_face_detection_system\video_processor.py", line 270, in process_video
-    if name in last_recognition:
-       ^^^^^^^^^^^^^^^^^^^^^^^^
-TypeError: unhashable type: 'dict'
-
-[2026-02-12 13:03:37] WARNING: Failed to process: vid1.mp4
-[2026-02-12 13:03:39] INFO: ============================================================
-[2026-02-12 13:03:39] INFO: Processing video: vid1.mp4
-[2026-02-12 13:03:39] INFO: Duration: 00:00:11
-[2026-02-12 13:03:39] INFO: FPS: 29.80
-[2026-02-12 13:03:39] INFO: Resolution: 478x850
-[2026-02-12 13:03:39] INFO: Total frames: 349
-[2026-02-12 13:03:40] ERROR: Error processing video: unhashable type: 'dict'
-[2026-02-12 13:03:40] ERROR: Traceback (most recent call last):
-  File "C:\Users\benso\OneDrive\Desktop\desktop\folder (4)\fisat_face_detection_system\video_processor.py", line 270, in process_video
-    if name in last_recognition:
-       ^^^^^^^^^^^^^^^^^^^^^^^^
-TypeError: unhashable type: 'dict'
-
-[2026-02-12 13:03:40] WARNING: Failed to process: vid1.mp4
-[2026-02-12 13:03:42] INFO: ============================================================
-[2026-02-12 13:03:42] INFO: Processing video: vid1.mp4
-[2026-02-12 13:03:42] INFO: Duration: 00:00:11
-[2026-02-12 13:03:42] INFO: FPS: 29.80
-[2026-02-12 13:03:42] INFO: Resolution: 478x850
-[2026-02-12 13:03:42] INFO: Total frames: 349
-[2026-02-12 13:03:42] ERROR: Error processing video: unhashable type: 'dict'
-[2026-02-12 13:03:42] ERROR: Traceback (most recent call last):
-  File "C:\Users\benso\OneDrive\Desktop\desktop\folder (4)\fisat_face_detection_system\video_processor.py", line 270, in process_video
-    if name in last_recognition:
-       ^^^^^^^^^^^^^^^^^^^^^^^^
-TypeError: unhashable type: 'dict'
-
-[2026-02-12 13:03:42] WARNING: Failed to process: vid1.mp4
-[2026-02-12 13:03:44] INFO: ============================================================
-[2026-02-12 13:03:44] INFO: Processing video: vid1.mp4
-[2026-02-12 13:03:44] INFO: Duration: 00:00:11
-[2026-02-12 13:03:44] INFO: FPS: 29.80
-[2026-02-12 13:03:44] INFO: Resolution: 478x850
-[2026-02-12 13:03:44] INFO: Total frames: 349
-[2026-02-12 13:03:44] ERROR: Error processing video: unhashable type: 'dict'
-[2026-02-12 13:03:44] ERROR: Traceback (most recent call last):
-  File "C:\Users\benso\OneDrive\Desktop\desktop\folder (4)\fisat_face_detection_system\video_processor.py", line 270, in process_video
-    if name in last_recognition:
-       ^^^^^^^^^^^^^^^^^^^^^^^^
-TypeError: unhashable type: 'dict'
-
-[2026-02-12 13:03:44] WARNING: Failed to process: vid1.mp4
-[2026-02-12 13:03:46] INFO: ============================================================
-[2026-02-12 13:03:46] INFO: Processing video: vid1.mp4
-[2026-02-12 13:03:46] INFO: Duration: 00:00:11
-[2026-02-12 13:03:46] INFO: FPS: 29.80
-[2026-02-12 13:03:46] INFO: Resolution: 478x850
-[2026-02-12 13:03:46] INFO: Total frames: 349
-[2026-02-12 13:03:47] ERROR: Error processing video: unhashable type: 'dict'
-[2026-02-12 13:03:47] ERROR: Traceback (most recent call last):
-  File "C:\Users\benso\OneDrive\Desktop\desktop\folder (4)\fisat_face_detection_system\video_processor.py", line 270, in process_video
-    if name in last_recognition:
-       ^^^^^^^^^^^^^^^^^^^^^^^^
-TypeError: unhashable type: 'dict'
-
-[2026-02-12 13:03:47] WARNING: Failed to process: vid1.mp4
-[2026-02-12 13:03:49] INFO: ============================================================
-[2026-02-12 13:03:49] INFO: Processing video: vid1.mp4
-[2026-02-12 13:03:49] INFO: Duration: 00:00:11
-[2026-02-12 13:03:49] INFO: FPS: 29.80
-[2026-02-12 13:03:49] INFO: Resolution: 478x850
-[2026-02-12 13:03:49] INFO: Total frames: 349
-[2026-02-12 13:03:49] ERROR: Error processing video: unhashable type: 'dict'
-[2026-02-12 13:03:49] ERROR: Traceback (most recent call last):
-  File "C:\Users\benso\OneDrive\Desktop\desktop\folder (4)\fisat_face_detection_system\video_processor.py", line 270, in process_video
-    if name in last_recognition:
-       ^^^^^^^^^^^^^^^^^^^^^^^^
-TypeError: unhashable type: 'dict'
-
-[2026-02-12 13:03:49] WARNING: Failed to process: vid1.mp4
-[2026-02-12 13:03:51] INFO: ============================================================
-[2026-02-12 13:03:51] INFO: Processing video: vid1.mp4
-[2026-02-12 13:03:51] INFO: Duration: 00:00:11
-[2026-02-12 13:03:51] INFO: FPS: 29.80
-[2026-02-12 13:03:51] INFO: Resolution: 478x850
-[2026-02-12 13:03:51] INFO: Total frames: 349
-[2026-02-12 13:03:52] ERROR: Error processing video: unhashable type: 'dict'
-[2026-02-12 13:03:52] ERROR: Traceback (most recent call last):
-  File "C:\Users\benso\OneDrive\Desktop\desktop\folder (4)\fisat_face_detection_system\video_processor.py", line 270, in process_video
-    if name in last_recognition:
-       ^^^^^^^^^^^^^^^^^^^^^^^^
-TypeError: unhashable type: 'dict'
-
-[2026-02-12 13:03:52] WARNING: Failed to process: vid1.mp4
-[2026-02-12 13:03:54] INFO: ============================================================
-[2026-02-12 13:03:54] INFO: Processing video: vid1.mp4
-[2026-02-12 13:03:54] INFO: Duration: 00:00:11
-[2026-02-12 13:03:54] INFO: FPS: 29.80
-[2026-02-12 13:03:54] INFO: Resolution: 478x850
-[2026-02-12 13:03:54] INFO: Total frames: 349
-[2026-02-12 13:03:54] ERROR: Error processing video: unhashable type: 'dict'
-[2026-02-12 13:03:54] ERROR: Traceback (most recent call last):
-  File "C:\Users\benso\OneDrive\Desktop\desktop\folder (4)\fisat_face_detection_system\video_processor.py", line 270, in process_video
-    if name in last_recognition:
-       ^^^^^^^^^^^^^^^^^^^^^^^^
-TypeError: unhashable type: 'dict'
-
-[2026-02-12 13:03:54] WARNING: Failed to process: vid1.mp4
-[2026-02-12 13:03:56] INFO: ============================================================
-[2026-02-12 13:03:56] INFO: Processing video: vid1.mp4
-[2026-02-12 13:03:56] INFO: Duration: 00:00:11
-[2026-02-12 13:03:56] INFO: FPS: 29.80
-[2026-02-12 13:03:56] INFO: Resolution: 478x850
-[2026-02-12 13:03:56] INFO: Total frames: 349
-[2026-02-12 13:03:56] ERROR: Error processing video: unhashable type: 'dict'
-[2026-02-12 13:03:56] ERROR: Traceback (most recent call last):
-  File "C:\Users\benso\OneDrive\Desktop\desktop\folder (4)\fisat_face_detection_system\video_processor.py", line 270, in process_video
-    if name in last_recognition:
-       ^^^^^^^^^^^^^^^^^^^^^^^^
-TypeError: unhashable type: 'dict'
-
-[2026-02-12 13:03:56] WARNING: Failed to process: vid1.mp4
-[2026-02-12 13:03:58] INFO: ============================================================
-[2026-02-12 13:03:58] INFO: Processing video: vid1.mp4
-[2026-02-12 13:03:58] INFO: Duration: 00:00:11
-[2026-02-12 13:03:58] INFO: FPS: 29.80
-[2026-02-12 13:03:58] INFO: Resolution: 478x850
-[2026-02-12 13:03:58] INFO: Total frames: 349
-[2026-02-12 13:03:59] ERROR: Error processing video: unhashable type: 'dict'
-[2026-02-12 13:03:59] ERROR: Traceback (most recent call last):
-  File "C:\Users\benso\OneDrive\Desktop\desktop\folder (4)\fisat_face_detection_system\video_processor.py", line 270, in process_video
-    if name in last_recognition:
-       ^^^^^^^^^^^^^^^^^^^^^^^^
-TypeError: unhashable type: 'dict'
-
-[2026-02-12 13:03:59] WARNING: Failed to process: vid1.mp4
-[2026-02-12 13:04:01] INFO: Exited video processing loop
-[2026-02-12 13:04:01] INFO: Video processing stopped
-[2026-02-12 13:05:31] INFO: Video Processor Queue initialized
-[2026-02-12 13:05:33] INFO: Face recognition system linked to video processor
-[2026-02-12 13:06:33] INFO: Face recognition system linked to video processor
-[2026-02-12 13:06:33] INFO: Entering video processing loop...
-[2026-02-12 13:06:33] INFO: Video processing started
-[2026-02-12 13:06:33] INFO: ============================================================
-[2026-02-12 13:06:33] INFO: Processing video: vid1.mp4
-[2026-02-12 13:06:33] INFO: Duration: 00:00:11
-[2026-02-12 13:06:33] INFO: FPS: 29.80
-[2026-02-12 13:06:33] INFO: Resolution: 478x850
-[2026-02-12 13:06:33] INFO: Total frames: 349
-[2026-02-12 13:06:35] INFO: Recognized: benz (124) at 00:00:00 (confidence: 0.44)
-[2026-02-12 13:06:35] INFO: Recognized: Ash (49) at 00:00:00 (confidence: 0.47)
-[2026-02-12 13:06:39] INFO: Progress: 28.7% (100/349 frames)
-[2026-02-12 13:06:39] INFO: Progress: 57.3% (200/349 frames)
-[2026-02-12 13:06:40] INFO: Recognized: NASA (395) at 00:00:08 (confidence: 0.40)
-[2026-02-12 13:06:41] INFO: Progress: 86.0% (300/349 frames)
-[2026-02-12 13:06:41] INFO: ------------------------------------------------------------
-[2026-02-12 13:06:41] INFO: Completed: vid1.mp4
-[2026-02-12 13:06:41] INFO: Total frames: 349
-[2026-02-12 13:06:41] INFO: Processed frames: 34
-[2026-02-12 13:06:41] INFO: Faces detected: 16
-[2026-02-12 13:06:41] INFO: Known faces: 3
-[2026-02-12 13:06:41] INFO: Unknown faces: 0
-[2026-02-12 13:06:41] INFO: Unique people recognized: 3
-[2026-02-12 13:06:41] INFO: Video marked as processed: vid1_done.mp4
-[2026-02-12 13:06:41] INFO: Moved to: C:\Users\benso\OneDrive\Desktop\desktop\folder (4)\fisat_face_detection_system\processed_videos
-[2026-02-12 13:06:43] INFO: No new videos found. Waiting for 60 seconds...
-[2026-02-12 13:07:43] INFO: No new videos found. Waiting for 60 seconds...
-[2026-02-12 13:08:43] INFO: No new videos found. Waiting for 60 seconds...
-[2026-02-12 13:09:43] INFO: No new videos found. Waiting for 60 seconds...
+[2026-02-12 13:13:49] INFO: Video Processor Queue initialized
+[2026-02-12 13:13:54] INFO: Face recognition system linked to video processor
+[2026-02-12 13:14:01] INFO: Face recognition system linked to video processor
+[2026-02-12 13:14:01] INFO: Entering video processing loop...
+[2026-02-12 13:14:01] INFO: Video processing started
+[2026-02-12 13:14:01] INFO: ============================================================
+[2026-02-12 13:14:01] INFO: Processing video: benny.mp4
+[2026-02-12 13:14:01] INFO: Duration: 00:00:01
+[2026-02-12 13:14:01] INFO: FPS: 29.59
+[2026-02-12 13:14:01] INFO: Resolution: 478x850
+[2026-02-12 13:14:01] INFO: Total frames: 43
+[2026-02-12 13:14:04] INFO: Recognized: Ash (49) at 00:00:00 (confidence: 0.51)
+[2026-02-12 13:14:05] INFO: ------------------------------------------------------------
+[2026-02-12 13:14:05] INFO: Completed: benny.mp4
+[2026-02-12 13:14:05] INFO: Total frames: 43
+[2026-02-12 13:14:05] INFO: Processed frames: 4
+[2026-02-12 13:14:05] INFO: Faces detected: 4
+[2026-02-12 13:14:05] INFO: Known faces: 1
+[2026-02-12 13:14:05] INFO: Unknown faces: 0
+[2026-02-12 13:14:05] INFO: Unique people recognized: 1
+[2026-02-12 13:14:05] INFO: Video marked as processed: benny_done.mp4
+[2026-02-12 13:14:05] INFO: Moved to: C:\Users\benso\OneDrive\Desktop\desktop\folder (4)\fisat_face_detection_system\processed_videos
+[2026-02-12 13:14:07] INFO: No new videos found. Waiting for 60 seconds...
+[2026-02-12 13:15:33] INFO: Video Processor Queue initialized
+[2026-02-12 13:15:36] INFO: Face recognition system linked to video processor
+[2026-02-12 13:15:43] INFO: Face recognition system linked to video processor
+[2026-02-12 13:15:43] INFO: Entering video processing loop...
+[2026-02-12 13:15:43] INFO: Video processing started
+[2026-02-12 13:15:43] INFO: ============================================================
+[2026-02-12 13:15:43] INFO: Processing video: ben.mp4
+[2026-02-12 13:15:43] INFO: Duration: 00:00:03
+[2026-02-12 13:15:43] INFO: FPS: 29.26
+[2026-02-12 13:15:43] INFO: Resolution: 478x850
+[2026-02-12 13:15:43] INFO: Total frames: 107
+[2026-02-12 13:15:46] INFO: Recognized: benz (124) at 00:00:00 (confidence: 0.60)
+[2026-02-12 13:15:49] INFO: Progress: 93.5% (100/107 frames)
+[2026-02-12 13:15:49] INFO: ------------------------------------------------------------
+[2026-02-12 13:15:49] INFO: Completed: ben.mp4
+[2026-02-12 13:15:49] INFO: Total frames: 107
+[2026-02-12 13:15:49] INFO: Processed frames: 10
+[2026-02-12 13:15:49] INFO: Faces detected: 10
+[2026-02-12 13:15:49] INFO: Known faces: 1
+[2026-02-12 13:15:49] INFO: Unknown faces: 0
+[2026-02-12 13:15:49] INFO: Unique people recognized: 1
+[2026-02-12 13:15:49] INFO: Video marked as processed: ben_done.mp4
+[2026-02-12 13:15:49] INFO: Moved to: C:\Users\benso\OneDrive\Desktop\desktop\folder (4)\fisat_face_detection_system\processed_videos
+[2026-02-12 13:15:51] INFO: No new videos found. Waiting for 60 seconds...
+[2026-02-12 13:16:51] INFO: ============================================================
+[2026-02-12 13:16:51] INFO: Processing video: benny.mp4
+[2026-02-12 13:16:51] INFO: Duration: 00:00:01
+[2026-02-12 13:16:51] INFO: FPS: 29.59
+[2026-02-12 13:16:51] INFO: Resolution: 478x850
+[2026-02-12 13:16:51] INFO: Total frames: 43
+[2026-02-12 13:16:51] INFO: Recognized: Ash (49) at 00:00:00 (confidence: 0.51)
+[2026-02-12 13:16:53] INFO: ------------------------------------------------------------
+[2026-02-12 13:16:53] INFO: Completed: benny.mp4
+[2026-02-12 13:16:53] INFO: Total frames: 43
+[2026-02-12 13:16:53] INFO: Processed frames: 4
+[2026-02-12 13:16:53] INFO: Faces detected: 4
+[2026-02-12 13:16:53] INFO: Known faces: 1
+[2026-02-12 13:16:53] INFO: Unknown faces: 0
+[2026-02-12 13:16:53] INFO: Unique people recognized: 1
+[2026-02-12 13:16:53] INFO: Video marked as processed: benny_done.mp4
+[2026-02-12 13:16:53] INFO: Moved to: C:\Users\benso\OneDrive\Desktop\desktop\folder (4)\fisat_face_detection_system\processed_videos
+[2026-02-12 13:16:55] INFO: No new videos found. Waiting for 60 seconds...
+[2026-02-12 13:17:55] INFO: No new videos found. Waiting for 60 seconds...
+[2026-02-12 13:18:55] INFO: No new videos found. Waiting for 60 seconds...
+[2026-02-12 13:19:55] INFO: No new videos found. Waiting for 60 seconds...
+[2026-02-12 13:19:56] INFO: Exited video processing loop
+[2026-02-12 13:19:56] INFO: Video processing stopped
+[2026-02-12 13:20:20] INFO: Video Processor Queue initialized
+[2026-02-12 13:20:24] INFO: Face recognition system linked to video processor
+[2026-02-12 13:20:35] INFO: Face recognition system linked to video processor
+[2026-02-12 13:20:35] INFO: Entering video processing loop...
+[2026-02-12 13:20:35] INFO: Video processing started
+[2026-02-12 13:20:35] INFO: ============================================================
+[2026-02-12 13:20:35] INFO: Processing video: benny.mp4
+[2026-02-12 13:20:35] INFO: Duration: 00:00:01
+[2026-02-12 13:20:35] INFO: FPS: 29.59
+[2026-02-12 13:20:35] INFO: Resolution: 478x850
+[2026-02-12 13:20:35] INFO: Total frames: 43
+[2026-02-12 13:20:38] INFO: Recognized: Ash (49) at 00:00:00 (confidence: 0.47)
+[2026-02-12 13:20:41] INFO: Progress: 23.3% (10/43 frames)
+[2026-02-12 13:20:44] INFO: Progress: 46.5% (20/43 frames)
+[2026-02-12 13:20:46] INFO: Recognized: benz (124) at 00:00:00 (confidence: 0.43)
+[2026-02-12 13:20:49] INFO: Progress: 69.8% (30/43 frames)
+[2026-02-12 13:20:53] INFO: Progress: 93.0% (40/43 frames)
+[2026-02-12 13:20:54] INFO: ------------------------------------------------------------
+[2026-02-12 13:20:54] INFO: Completed: benny.mp4
+[2026-02-12 13:20:54] INFO: Total frames: 43
+[2026-02-12 13:20:54] INFO: Processed frames: 43
+[2026-02-12 13:20:54] INFO: Faces detected: 43
+[2026-02-12 13:20:54] INFO: Known faces: 2
+[2026-02-12 13:20:54] INFO: Unknown faces: 0
+[2026-02-12 13:20:54] INFO: Unique people recognized: 2
+[2026-02-12 13:20:54] INFO: Video marked as processed: benny_done.mp4
+[2026-02-12 13:20:54] INFO: Moved to: C:\Users\benso\OneDrive\Desktop\desktop\folder (4)\fisat_face_detection_system\processed_videos
+[2026-02-12 13:20:56] INFO: No new videos found. Waiting for 60 seconds...
+[2026-02-12 13:21:56] INFO: No new videos found. Waiting for 60 seconds...
+[2026-02-12 13:22:56] INFO: No new videos found. Waiting for 60 seconds...
+[2026-02-12 13:23:56] INFO: No new videos found. Waiting for 60 seconds...
+[2026-02-12 13:24:56] INFO: No new videos found. Waiting for 60 seconds...
+[2026-02-12 13:25:56] INFO: No new videos found. Waiting for 60 seconds...
+[2026-02-12 13:26:56] INFO: No new videos found. Waiting for 60 seconds...
+[2026-02-12 13:27:56] INFO: ============================================================
+[2026-02-12 13:27:56] INFO: Processing video: benny.mp4
+[2026-02-12 13:27:57] INFO: Duration: 00:00:01
+[2026-02-12 13:27:57] INFO: FPS: 29.59
+[2026-02-12 13:27:57] INFO: Resolution: 478x850
+[2026-02-12 13:27:57] INFO: Total frames: 43
+[2026-02-12 13:27:57] INFO: Recognized: Ash (49) at 00:00:00 (confidence: 0.47)
+[2026-02-12 13:28:01] INFO: Progress: 23.3% (10/43 frames)
+[2026-02-12 13:28:04] INFO: Progress: 46.5% (20/43 frames)
+[2026-02-12 13:28:06] INFO: Recognized: benz (124) at 00:00:00 (confidence: 0.43)
+[2026-02-12 13:28:08] INFO: Progress: 69.8% (30/43 frames)
+[2026-02-12 13:28:12] INFO: Progress: 93.0% (40/43 frames)
+[2026-02-12 13:28:13] INFO: ------------------------------------------------------------
+[2026-02-12 13:28:13] INFO: Completed: benny.mp4
+[2026-02-12 13:28:13] INFO: Total frames: 43
+[2026-02-12 13:28:13] INFO: Processed frames: 43
+[2026-02-12 13:28:13] INFO: Faces detected: 43
+[2026-02-12 13:28:13] INFO: Known faces: 2
+[2026-02-12 13:28:13] INFO: Unknown faces: 0
+[2026-02-12 13:28:13] INFO: Unique people recognized: 2
+[2026-02-12 13:28:13] INFO: Video marked as processed: benny_done.mp4
+[2026-02-12 13:28:13] INFO: Moved to: C:\Users\benso\OneDrive\Desktop\desktop\folder (4)\fisat_face_detection_system\processed_videos
+[2026-02-12 13:28:15] INFO: No new videos found. Waiting for 60 seconds...
+[2026-02-12 13:29:15] INFO: No new videos found. Waiting for 60 seconds...
+[2026-02-12 13:30:15] INFO: No new videos found. Waiting for 60 seconds...
+[2026-02-12 13:31:16] INFO: Video Processor Queue initialized
+[2026-02-12 13:31:19] INFO: Face recognition system linked to video processor
+[2026-02-12 13:31:29] INFO: Face recognition system linked to video processor
+[2026-02-12 13:31:29] INFO: Entering video processing loop...
+[2026-02-12 13:31:29] INFO: Video processing started
+[2026-02-12 13:31:29] INFO: ============================================================
+[2026-02-12 13:31:29] INFO: Processing video: benny.mp4
+[2026-02-12 13:31:29] INFO: Duration: 00:00:01
+[2026-02-12 13:31:29] INFO: FPS: 29.59
+[2026-02-12 13:31:29] INFO: Resolution: 478x850
+[2026-02-12 13:31:29] INFO: Total frames: 43
+[2026-02-12 13:31:33] INFO: Recognized: Ash (49) at 00:00:00 (confidence: 0.53)
+[2026-02-12 13:31:35] INFO: Progress: 23.3% (10/43 frames)
+[2026-02-12 13:31:38] INFO: Progress: 46.5% (20/43 frames)
+[2026-02-12 13:31:42] INFO: Progress: 69.8% (30/43 frames)
+[2026-02-12 13:31:45] INFO: Progress: 93.0% (40/43 frames)
+[2026-02-12 13:31:46] INFO: ------------------------------------------------------------
+[2026-02-12 13:31:46] INFO: Completed: benny.mp4
+[2026-02-12 13:31:46] INFO: Total frames: 43
+[2026-02-12 13:31:46] INFO: Processed frames: 43
+[2026-02-12 13:31:46] INFO: Faces detected: 43
+[2026-02-12 13:31:46] INFO: Known faces: 1
+[2026-02-12 13:31:46] INFO: Unknown faces: 42
+[2026-02-12 13:31:46] INFO: Unique people recognized: 1
+[2026-02-12 13:31:46] INFO: Video marked as processed: benny_done.mp4
+[2026-02-12 13:31:46] INFO: Moved to: C:\Users\benso\OneDrive\Desktop\desktop\folder (4)\fisat_face_detection_system\processed_videos
+[2026-02-12 13:31:48] INFO: No new videos found. Waiting for 60 seconds...
+[2026-02-12 13:32:48] INFO: No new videos found. Waiting for 60 seconds...
+[2026-02-12 13:33:48] INFO: No new videos found. Waiting for 60 seconds...
+[2026-02-12 13:34:48] INFO: No new videos found. Waiting for 60 seconds...
+[2026-02-12 13:35:48] INFO: ============================================================
+[2026-02-12 13:35:48] INFO: Processing video: ben.mp4
+[2026-02-12 13:35:48] INFO: Duration: 00:00:03
+[2026-02-12 13:35:48] INFO: FPS: 29.26
+[2026-02-12 13:35:48] INFO: Resolution: 478x850
+[2026-02-12 13:35:48] INFO: Total frames: 107
+[2026-02-12 13:35:49] INFO: Recognized: benz (124) at 00:00:00 (confidence: 0.61)
+[2026-02-12 13:35:52] INFO: Progress: 9.3% (10/107 frames)
+[2026-02-12 13:35:55] INFO: Progress: 18.7% (20/107 frames)
+[2026-02-12 13:35:59] INFO: Progress: 28.0% (30/107 frames)
+[2026-02-12 13:36:02] INFO: Progress: 37.4% (40/107 frames)
+[2026-02-12 13:36:06] INFO: Progress: 46.7% (50/107 frames)
+[2026-02-12 13:36:09] INFO: Progress: 56.1% (60/107 frames)
+[2026-02-12 13:36:12] INFO: Progress: 65.4% (70/107 frames)
+[2026-02-12 13:36:15] INFO: Progress: 74.8% (80/107 frames)
+[2026-02-12 13:36:19] INFO: Progress: 84.1% (90/107 frames)
+[2026-02-12 13:36:19] INFO: Recognized: benz (124) at 00:00:03 (confidence: 0.59)
+[2026-02-12 13:36:22] INFO: Progress: 93.5% (100/107 frames)
+[2026-02-12 13:36:25] INFO: ------------------------------------------------------------
+[2026-02-12 13:36:25] INFO: Completed: ben.mp4
+[2026-02-12 13:36:25] INFO: Total frames: 107
+[2026-02-12 13:36:25] INFO: Processed frames: 107
+[2026-02-12 13:36:25] INFO: Faces detected: 107
+[2026-02-12 13:36:25] INFO: Known faces: 2
+[2026-02-12 13:36:25] INFO: Unknown faces: 105
+[2026-02-12 13:36:25] INFO: Unique people recognized: 1
+[2026-02-12 13:36:25] INFO: Video marked as processed: ben_done.mp4
+[2026-02-12 13:36:25] INFO: Moved to: C:\Users\benso\OneDrive\Desktop\desktop\folder (4)\fisat_face_detection_system\processed_videos
+[2026-02-12 13:36:27] INFO: No new videos found. Waiting for 60 seconds...
+[2026-02-12 13:37:27] INFO: No new videos found. Waiting for 60 seconds...
+[2026-02-12 13:38:27] INFO: No new videos found. Waiting for 60 seconds...
+[2026-02-12 13:39:27] INFO: No new videos found. Waiting for 60 seconds...
+[2026-02-12 13:40:27] INFO: No new videos found. Waiting for 60 seconds...
+[2026-02-12 13:41:27] INFO: No new videos found. Waiting for 60 seconds...
+[2026-02-12 13:42:27] INFO: No new videos found. Waiting for 60 seconds...
+[2026-02-12 13:43:27] INFO: No new videos found. Waiting for 60 seconds...
+[2026-02-12 13:44:00] INFO: Video Processor Queue initialized
+[2026-02-12 13:44:02] INFO: Face recognition system linked to video processor
+[2026-02-12 13:44:23] INFO: Face recognition system linked to video processor
+[2026-02-12 13:44:23] INFO: Entering video processing loop...
+[2026-02-12 13:44:23] INFO: Video processing started
+[2026-02-12 13:44:23] INFO: ============================================================
+[2026-02-12 13:44:23] INFO: Processing video: beny.mp4
+[2026-02-12 13:44:23] INFO: Duration: 00:00:01
+[2026-02-12 13:44:23] INFO: FPS: 29.59
+[2026-02-12 13:44:23] INFO: Resolution: 478x850
+[2026-02-12 13:44:23] INFO: Total frames: 43
+[2026-02-12 13:44:27] INFO: ------------------------------------------------------------
+[2026-02-12 13:44:27] INFO: Completed: beny.mp4
+[2026-02-12 13:44:27] INFO: Tracks found: 1
+[2026-02-12 13:44:27] INFO: Confirmed identities: 0
+[2026-02-12 13:44:27] INFO: Unknown tracks: 1
+[2026-02-12 13:44:27] WARNING: No faces were confirmed in this video
+[2026-02-12 13:44:27] INFO: Video marked as processed: beny_done.mp4
+[2026-02-12 13:44:27] INFO: Moved to: C:\Users\benso\OneDrive\Desktop\desktop\folder (4)\fisat_face_detection_system\processed_videos
+[2026-02-12 13:44:29] INFO: No new videos found. Waiting for 60 seconds...
+[2026-02-12 13:44:34] INFO: Exited video processing loop
+[2026-02-12 13:44:34] INFO: Video processing stopped

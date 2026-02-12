@@ -71,8 +71,14 @@ WINDOW_TITLE = "College Canteen Face Detection System"
 MIN_TIME_BETWEEN_LOGS = 30  # Minimum seconds between logging same person
 
 # Video Processing Queue settings
-VIDEO_FRAME_SKIP_INTERVAL = 10  # Process 1 frame every N frames (10 = faster processing)
+VIDEO_FRAME_SKIP_INTERVAL = 5  # Process 1 frame every N frames (10 = faster processing)
 VIDEO_MAX_DURATION = 10 * 60  # Maximum video duration in seconds (10 minutes)
 VIDEO_SUPPORTED_FORMATS = ['.mp4', '.avi', '.mov', '.mkv', '.flv']  # Supported video formats
 VIDEO_AUTO_WAIT_ENABLED = True  # Automatically wait and rescan when no videos found
 VIDEO_WAIT_INTERVAL = 60  # Seconds to wait before rescanning empty folder
+
+# ── Accuracy / Voting settings ──
+VIDEO_MIN_CONSECUTIVE_FRAMES = 3   # Must see same person N frames in a row
+VIDEO_BLUR_THRESHOLD = 80.0        # Laplacian variance below this → skip blurry face
+VIDEO_VOTE_RATIO = 0.40            # ≥40 % of track votes for identity to confirm
+VIDEO_CONFIDENCE_FLOOR = 0.50      # Ignore recognitions below this confidence

@@ -651,8 +651,6 @@ class CanteenFaceDetectionGUI:
                         break
                 
                 # Try to reconnect RTSP stream
-                el
-                # Try to reconnect RTSP stream
                 if config.USE_RTSP and failed_reads >= max_failed_reads:
                     self.root.after(0, lambda: self.update_status("🟡 Reconnecting RTSP...", "orange"))
                     if self.cap:
@@ -1143,23 +1141,27 @@ class CanteenFaceDetectionGUI:
         self.root.after(0, update)
     
     def on_video_recognition_update(self, name, timestamp, confidence):
-        """Callback for video recognition updates"""
-        def update():
-            result_text = f"{timestamp} - {name} ({confidence:.0%})"
-            self.video_results_listbox.insert(0, result_text)
-            
-            # Keep only last 100 results
-            if self.video_results_listbox.size() > 100:
-                self.video_results_listbox.delete(tk.END)
-        
-        self.root.after(0, update)
+        """Legacy callback – no longer called by the new processor (kept for compat)."""
+        pass
     
-    def on_video_complete(self, video_name, stats):
-        """Callback when video processing completes"""
+    def on_video_complete(self, video_name, stats, results=None):
+        """Callback when video processing completes – shows batch results."""
         def update():
             self.video_results_listbox.insert(0, "")
             self.video_results_listbox.insert(0, f"✅ Completed: {video_name}")
-            self.video_results_listbox.insert(0, f"   Known: {stats['known_faces']}, Unknown: {stats['unknown_faces']}")
+            self.video_results_listbox.insert(0,
+                f"   Known: {stats['known_faces']}, Unknown: {stats['unknown_faces']}")
+
+            # ── batch-insert confirmed identities ─────────────────
+            if results:
+                for r in results:
+                    if r['is_known']:
+                        line = (f"   ✓ {r['name']} ({r['student_id']}) "
+                                f"at {r['timestamp']}  conf={r['confidence']:.0%}")
+                    else:
+                        line = f"   ? Unknown track at {r['timestamp']}"
+                    self.video_results_listbox.insert(0, line)
+
             self.video_results_listbox.insert(0, "")
             self.refresh_video_queue()
             self.refresh_logs()  # Refresh logs tab to show new entries
