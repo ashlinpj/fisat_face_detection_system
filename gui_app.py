@@ -153,6 +153,9 @@ class CanteenFaceDetectionGUI:
         self.video_processing_tab = ttk.Frame(self.notebook)
         self.notebook.add(self.video_processing_tab, text="🎥 Video Processing")
         self.build_video_processing_tab()
+        
+        # Bind tab change to auto-refresh logs
+        self.notebook.bind('<<NotebookTabChanged>>', self.on_tab_changed)
     
     def build_detection_tab(self):
         """Build the live detection tab"""
@@ -278,7 +281,7 @@ class CanteenFaceDetectionGUI:
         scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
     
     def build_logs_tab(self):
-        """Build the visit logs tab"""
+        """Build the visit logs tab – grouped by date"""
         # Filters
         filter_frame = ttk.Frame(self.logs_tab)
         filter_frame.pack(fill=tk.X, pady=(0, 10))
@@ -302,18 +305,32 @@ class CanteenFaceDetectionGUI:
         export_btn = ttk.Button(filter_frame, text="📥 Export CSV", command=self.export_logs)
         export_btn.pack(side=tk.RIGHT, padx=5)
         
-        # Logs table
+        # Logs tree – grouped by date, then name → time
         table_frame = ttk.Frame(self.logs_tab)
         table_frame.pack(fill=tk.BOTH, expand=True)
         
-        columns = ('ID', 'Date', 'Entry Time', 'Student ID', 'Name', 'Status', 'Duration')
-        self.logs_tree = ttk.Treeview(table_frame, columns=columns, show='headings')
+        columns = ('Name', 'Time', 'Source', 'Confidence')
+        self.logs_tree = ttk.Treeview(table_frame, columns=columns, show='tree headings')
         
-        for col in columns:
-            self.logs_tree.heading(col, text=col)
-            self.logs_tree.column(col, width=100)
+        self.logs_tree.heading('#0', text='Date / Student')
+        self.logs_tree.column('#0', width=220, stretch=False)
         
+        self.logs_tree.heading('Name', text='Name')
         self.logs_tree.column('Name', width=180)
+        
+        self.logs_tree.heading('Time', text='Time')
+        self.logs_tree.column('Time', width=100)
+        
+        self.logs_tree.heading('Source', text='Source')
+        self.logs_tree.column('Source', width=80)
+        
+        self.logs_tree.heading('Confidence', text='Status')
+        self.logs_tree.column('Confidence', width=80)
+        
+        # Configure tag styles for date headers
+        self.logs_tree.tag_configure('date_header', font=('Segoe UI', 11, 'bold'))
+        self.logs_tree.tag_configure('known', foreground='#006400')
+        self.logs_tree.tag_configure('unknown', foreground='#8B0000')
         
         scrollbar = ttk.Scrollbar(table_frame, orient=tk.VERTICAL, command=self.logs_tree.yview)
         self.logs_tree.configure(yscrollcommand=scrollbar.set)
@@ -980,7 +997,7 @@ class CanteenFaceDetectionGUI:
             messagebox.showinfo("Success", "Student deleted successfully!")
     
     def refresh_logs(self):
-        """Refresh logs table"""
+        """Refresh logs table – grouped by date, then name → time"""
         # Clear existing
         for item in self.logs_tree.get_children():
             self.logs_tree.delete(item)
@@ -989,28 +1006,54 @@ class CanteenFaceDetectionGUI:
         date = self.log_date_var.get().strip() or None
         student_id = self.log_student_var.get().strip() or None
         
-        # Load logs
+        # Load logs (newest first)
         logs = database.get_visit_logs(date=date, student_id=student_id)
         
+        # Group by date
+        from collections import OrderedDict
+        date_groups: OrderedDict = OrderedDict()
         for log in logs:
-            entry_time = log.get('entry_time', 'N/A')
-            if entry_time and len(entry_time) > 19:
-                entry_time = entry_time[:19]
+            d = log.get('date', 'Unknown')
+            date_groups.setdefault(d, []).append(log)
+        
+        for date_str, entries in date_groups.items():
+            # Insert date header row
+            total = len(entries)
+            known = sum(1 for e in entries if e.get('is_known'))
+            date_label = f"📅  {date_str}   ({known} known / {total} total)"
+            date_node = self.logs_tree.insert(
+                '', tk.END, text=date_label,
+                values=('', '', '', ''),
+                open=True, tags=('date_header',)
+            )
             
-            status = "Known" if log.get('is_known') else "Unknown"
-            duration = log.get('duration_minutes', '-')
-            if duration and duration != '-':
-                duration = f"{duration} min"
-            
-            self.logs_tree.insert('', tk.END, values=(
-                log['id'],
-                log.get('date', 'N/A'),
-                entry_time,
-                log.get('student_id', 'Unknown'),
-                log.get('student_name', 'Unknown'),
-                status,
-                duration
-            ))
+            # Insert each visit under the date
+            for log in entries:
+                entry_time = log.get('entry_time', '')
+                # Extract HH:MM:SS from timestamp
+                if entry_time and len(entry_time) >= 19:
+                    time_str = entry_time[11:19]
+                elif entry_time and len(entry_time) >= 8:
+                    time_str = entry_time[:8]
+                else:
+                    time_str = entry_time
+                
+                name = log.get('student_name', 'Unknown')
+                source = log.get('source_type', 'live')
+                is_known = log.get('is_known')
+                status = "✓ Known" if is_known else "? Unknown"
+                tag = 'known' if is_known else 'unknown'
+                
+                display_name = f"{name}"
+                if log.get('student_id') and log['student_id'] != 'Unknown':
+                    display_name += f"  [{log['student_id']}]"
+                
+                self.logs_tree.insert(
+                    date_node, tk.END,
+                    text=f"     {name}",
+                    values=(display_name, time_str, source, status),
+                    tags=(tag,)
+                )
     
     def clear_log_filters(self):
         """Clear log filters"""
@@ -1365,6 +1408,18 @@ class CanteenFaceDetectionGUI:
 
     def update_video_status_loop(self):
         self._update_video_stats_loop()
+    
+    def on_tab_changed(self, event):
+        """Handle notebook tab change - auto-refresh logs tab"""
+        try:
+            current_tab = self.notebook.index(self.notebook.select())
+            # Tab 2 is the logs tab (0=Detection, 1=Students, 2=Logs, 3=Stats, 4=Video)
+            if current_tab == 2:
+                self.refresh_logs()
+            elif current_tab == 3:
+                self.refresh_statistics()
+        except Exception as e:
+            pass  # Silently ignore errors during tab switching
     
     def on_closing(self):
         """Handle window close"""

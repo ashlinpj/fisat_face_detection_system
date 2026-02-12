@@ -43,6 +43,25 @@ VOTE_RATIO             = getattr(config, "VIDEO_VOTE_RATIO", 0.40)
 CONFIDENCE_FLOOR       = getattr(config, "VIDEO_CONFIDENCE_FLOOR", 0.50)
 
 
+def _enhance_face_fast(face_image: np.ndarray) -> np.ndarray:
+    """Lightweight face enhancement for video pipeline.
+
+    Skips the expensive PIL round-trip, sharpness/brightness tweaks, and
+    fastNlMeansDenoisingColored that the full enhance_face() uses.
+    Only does resize + CLAHE (the step that matters most for recognition).
+    ~10x faster than FaceRecognitionSystem.enhance_face().
+    """
+    if face_image is None or face_image.size == 0:
+        return face_image
+    face_resized = cv2.resize(face_image, (224, 224), interpolation=cv2.INTER_LINEAR)
+    lab = cv2.cvtColor(face_resized, cv2.COLOR_BGR2LAB)
+    l, a, b = cv2.split(lab)
+    clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+    l = clahe.apply(l)
+    face_out = cv2.cvtColor(cv2.merge([l, a, b]), cv2.COLOR_LAB2BGR)
+    return face_out
+
+
 class VideoProcessorQueue:
     """Processes video files with face detection + recognition."""
 
@@ -127,6 +146,32 @@ class VideoProcessorQueue:
                     logging.StreamHandler(),
                 ],
             )
+        # Clean summary log path
+        self.summary_log = os.path.join(self.logs_dir, "detection_summary.log")
+    
+    def _write_summary_log(self, video_name: str, known_results: list, unknown_results: list):
+        """Write clean, readable summary to detection_summary.log"""
+        try:
+            with open(self.summary_log, 'a', encoding='utf-8') as f:
+                date_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                f.write(f"\n{'='*70}\n")
+                f.write(f"📹 {video_name}\n")
+                f.write(f"⏰ {date_str}\n")
+                f.write(f"{'-'*70}\n")
+                
+                if known_results:
+                    f.write(f"✅ Detected: {len(known_results)} person(s)\n\n")
+                    for r in known_results:
+                        f.write(f"  👤 {r['name']:20s}  [{r['student_id']}]  at {r['timestamp']}  (confidence: {r['confidence']:.0%})\n")
+                else:
+                    f.write("❌ No recognized faces\n")
+                
+                if unknown_results:
+                    f.write(f"\n⚠️  Unknown: {len(unknown_results)} track(s)\n")
+                
+                f.write(f"{'='*70}\n")
+        except Exception as e:
+            logging.error(f"Failed to write summary log: {e}")
 
     def set_face_system(self, face_system: FaceRecognitionSystem):
         self.face_system = face_system
@@ -280,15 +325,16 @@ class VideoProcessorQueue:
                 if not faces:
                     for tid in tracks:
                         tracks[tid]["consecutive"] = 0
-                    # Update vis data (frame only, no faces)
-                    with self._frame_lock:
-                        self.current_frame_data = {
-                            "frame": frame.copy(),
-                            "faces": [],
-                            "progress_pct": progress_pct,
-                            "video_name": video_name,
-                            "frame_number": frame_number,
-                        }
+                    # Update vis data (frame ref only – no copy needed for empty frames)
+                    if frame_number % (self.frame_skip_interval * 3) == 0:
+                        with self._frame_lock:
+                            self.current_frame_data = {
+                                "frame": frame,
+                                "faces": [],
+                                "progress_pct": progress_pct,
+                                "video_name": video_name,
+                                "frame_number": frame_number,
+                            }
                     continue
 
                 self.current_video_stats["faces_detected"] += len(faces)
@@ -315,8 +361,8 @@ class VideoProcessorQueue:
                         })
                         continue
 
-                    # Enhance face (same as webcam pipeline)
-                    face_enhanced = self.face_system.enhance_face(face_crop)
+                    # Fast enhance (skip expensive denoise + PIL round-trip)
+                    face_enhanced = _enhance_face_fast(face_crop)
 
                     # ── Same recognition logic as live detection thread ──
                     # Step 1: get embedding from enhanced face
@@ -412,10 +458,24 @@ class VideoProcessorQueue:
                         tracks[tid]["consecutive"] = 0
 
                 # ── expose frame for visualization (thread-safe) ──
+                # Downscale before copying to reduce memory + time
+                preview_w = getattr(config, "VIDEO_PREVIEW_WIDTH", 640)
+                scale_x = preview_w / frame.shape[1]
+                ph = int(frame.shape[0] * scale_x)
+                preview = cv2.resize(frame, (preview_w, ph), interpolation=cv2.INTER_NEAREST)
+                # Rescale bbox coords to preview size
+                scaled_face_data = []
+                for fd in frame_face_data:
+                    bx1, by1, bx2, by2 = fd["bbox"]
+                    scaled_face_data.append({
+                        **fd,
+                        "bbox": (int(bx1 * scale_x), int(by1 * scale_x),
+                                 int(bx2 * scale_x), int(by2 * scale_x)),
+                    })
                 with self._frame_lock:
                     self.current_frame_data = {
-                        "frame": frame.copy(),
-                        "faces": frame_face_data,
+                        "frame": preview,
+                        "faces": scaled_face_data,
                         "progress_pct": progress_pct,
                         "video_name": video_name,
                         "frame_number": frame_number,
@@ -510,7 +570,7 @@ class VideoProcessorQueue:
             self.current_video_stats["known_faces"] = len(known_results)
             self.current_video_stats["unknown_faces"] = len(unknown_results)
 
-            # ── summary log ───────────────────────────────────────
+            # ── summary logs ──────────────────────────────────────
             logging.info("-" * 60)
             logging.info(f"Completed: {video_name}")
             logging.info(f"Tracks found: {len(tracks)}")
@@ -520,6 +580,9 @@ class VideoProcessorQueue:
                 logging.info(f"  OK  {r['name']} ({r['student_id']}) at {r['timestamp']}  conf={r['confidence']:.2f}")
             if not known_results:
                 logging.warning("No faces were confirmed in this video")
+            
+            # Write clean summary log
+            self._write_summary_log(video_name, known_results, unknown_results)
 
             self.total_videos_processed += 1
             self.total_faces_recognized += len(known_results)

@@ -1,0 +1,36 @@
+======================================================================
+📹 Sample Video Detection Log
+⏰ This file shows a clean summary of who was detected in each video
+----------------------------------------------------------------------
+This is a human-readable log file that shows ONLY the important info:
+- Date and time the video was processed
+- Video filename
+- Who was detected with their confidence levels
+- Count of unknown faces
+
+This file is much easier to read than video_processing.log!
+======================================================================
+
+
+======================================================================
+📹 recording_2026-02-13_00-19.processing
+⏰ 2026-02-13 00:44:00
+----------------------------------------------------------------------
+✅ Detected: 1 person(s)
+
+  👤 benz                  [124]  at 00:00:23  (confidence: 80%)
+
+⚠️  Unknown: 22 track(s)
+======================================================================
+
+
+======================================================================
+📹 recording_2026-02-13_00-19-16.processing
+⏰ 2026-02-13 00:25:26
+----------------------------------------------------------------------
+✅ Detected: 1 person(s)
+
+  👤 benz                  [124]  at 00:00:23  (confidence: 81%)
+
+⚠️  Unknown: 22 track(s)
+======================================================================
