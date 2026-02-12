@@ -18,6 +18,7 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 import config
 import database
 from face_recognition_module import FaceRecognitionSystem
+from video_processor import get_video_processor
 
 class CanteenFaceDetectionGUI:
     def register_from_file(self):
@@ -63,6 +64,9 @@ class CanteenFaceDetectionGUI:
         self.face_system = None
         self.current_frame = None
         self.video_thread = None
+        
+        # Video processor
+        self.video_processor = get_video_processor()
         
         # Style configuration
         self.setup_styles()
@@ -137,6 +141,11 @@ class CanteenFaceDetectionGUI:
         self.stats_tab = ttk.Frame(self.notebook)
         self.notebook.add(self.stats_tab, text="📊 Statistics")
         self.build_stats_tab()
+        
+        # Tab 5: Video Processing
+        self.video_processing_tab = ttk.Frame(self.notebook)
+        self.notebook.add(self.video_processing_tab, text="🎥 Video Processing")
+        self.build_video_processing_tab()
     
     def build_detection_tab(self):
         """Build the live detection tab"""
@@ -346,6 +355,116 @@ class CanteenFaceDetectionGUI:
         self.stats_text = tk.Text(details_frame, font=('Consolas', 10), height=15)
         self.stats_text.pack(fill=tk.BOTH, expand=True)
     
+    def build_video_processing_tab(self):
+        """Build the video processing tab"""
+        # Control panel at top
+        control_frame = ttk.Frame(self.video_processing_tab)
+        control_frame.pack(fill=tk.X, pady=(0, 10))
+        
+        # Buttons
+        self.video_upload_btn = ttk.Button(
+            control_frame,
+            text="📁 Upload Video",
+            style='Big.TButton',
+            command=self.upload_video_file
+        )
+        self.video_upload_btn.pack(side=tk.LEFT, padx=5)
+        
+        self.video_start_btn = ttk.Button(
+            control_frame,
+            text="▶ Start Processing",
+            style='Big.TButton',
+            command=self.toggle_video_processing
+        )
+        self.video_start_btn.pack(side=tk.LEFT, padx=5)
+        
+        self.video_refresh_btn = ttk.Button(
+            control_frame,
+            text="🔄 Refresh Folder",
+            command=self.refresh_video_queue
+        )
+        self.video_refresh_btn.pack(side=tk.LEFT, padx=5)
+        
+        self.video_open_folder_btn = ttk.Button(
+            control_frame,
+            text="📂 Open Videos Folder",
+            command=self.open_videos_folder
+        )
+        self.video_open_folder_btn.pack(side=tk.LEFT, padx=5)
+        
+        # Status section
+        status_frame = ttk.LabelFrame(self.video_processing_tab, text="Processing Status", padding="10")
+        status_frame.pack(fill=tk.X, pady=(0, 10))
+        
+        self.video_status_label = ttk.Label(status_frame, text="⚪ Not Started", font=('Segoe UI', 10, 'bold'))
+        self.video_status_label.pack(anchor=tk.W)
+        
+        self.video_current_label = ttk.Label(status_frame, text="Current Video: None")
+        self.video_current_label.pack(anchor=tk.W)
+        
+        self.video_pending_label = ttk.Label(status_frame, text="Pending Videos: 0")
+        self.video_pending_label.pack(anchor=tk.W)
+        
+        # Split into left (queue) and right (info) panels
+        content_frame = ttk.Frame(self.video_processing_tab)
+        content_frame.pack(fill=tk.BOTH, expand=True)
+        
+        left_panel = ttk.Frame(content_frame)
+        left_panel.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(0, 5))
+        
+        right_panel = ttk.Frame(content_frame, width=300)
+        right_panel.pack(side=tk.RIGHT, fill=tk.Y, padx=(5, 0))
+        right_panel.pack_propagate(False)
+        
+        # Left: Video Queue List
+        queue_frame = ttk.LabelFrame(left_panel, text="Video Queue", padding="5")
+        queue_frame.pack(fill=tk.BOTH, expand=True)
+        
+        self.video_queue_listbox = tk.Listbox(queue_frame, font=('Consolas', 9))
+        self.video_queue_listbox.pack(fill=tk.BOTH, expand=True, side=tk.LEFT)
+        
+        queue_scrollbar = ttk.Scrollbar(queue_frame, orient=tk.VERTICAL, command=self.video_queue_listbox.yview)
+        queue_scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        self.video_queue_listbox.config(yscrollcommand=queue_scrollbar.set)
+        
+        # Right: Recognition Results
+        results_frame = ttk.LabelFrame(right_panel, text="Recognition Results", padding="10")
+        results_frame.pack(fill=tk.BOTH, expand=True)
+        
+        self.video_results_listbox = tk.Listbox(results_frame, font=('Consolas', 9))
+        self.video_results_listbox.pack(fill=tk.BOTH, expand=True)
+        
+        # Statistics
+        stats_frame = ttk.LabelFrame(self.video_processing_tab, text="Session Statistics", padding="10")
+        stats_frame.pack(fill=tk.X, pady=(10, 0))
+        
+        stats_grid = ttk.Frame(stats_frame)
+        stats_grid.pack(fill=tk.X)
+        
+        ttk.Label(stats_grid, text="Videos Processed:").grid(row=0, column=0, sticky=tk.W, pady=2)
+        self.video_stat_processed = ttk.Label(stats_grid, text="0", font=('Segoe UI', 10, 'bold'))
+        self.video_stat_processed.grid(row=0, column=1, sticky=tk.W, padx=10)
+        
+        ttk.Label(stats_grid, text="Total Faces Recognized:").grid(row=1, column=0, sticky=tk.W, pady=2)
+        self.video_stat_faces = ttk.Label(stats_grid, text="0", font=('Segoe UI', 10, 'bold'))
+        self.video_stat_faces.grid(row=1, column=1, sticky=tk.W, padx=10)
+        
+        ttk.Label(stats_grid, text="Current Video Frames:").grid(row=0, column=2, sticky=tk.W, pady=2, padx=(20, 0))
+        self.video_stat_frames = ttk.Label(stats_grid, text="0/0", font=('Segoe UI', 10, 'bold'))
+        self.video_stat_frames.grid(row=0, column=3, sticky=tk.W, padx=10)
+        
+        ttk.Label(stats_grid, text="Current Video Faces:").grid(row=1, column=2, sticky=tk.W, pady=2, padx=(20, 0))
+        self.video_stat_current_faces = ttk.Label(stats_grid, text="0 detected", font=('Segoe UI', 10, 'bold'))
+        self.video_stat_current_faces.grid(row=1, column=3, sticky=tk.W, padx=10)
+        
+        # Setup callbacks for video processor
+        self.video_processor.on_status_update = self.on_video_status_update
+        self.video_processor.on_recognition_update = self.on_video_recognition_update
+        self.video_processor.on_video_complete = self.on_video_complete
+        
+        # Initial refresh
+        self.refresh_video_queue()
+    
     def initialize_system(self):
         """Initialize the face recognition system"""
         self.update_status("Initializing system...", "orange")
@@ -354,6 +473,11 @@ class CanteenFaceDetectionGUI:
             try:
                 database.init_database()
                 self.face_system = FaceRecognitionSystem()
+                
+                # Link face system to video processor
+                if hasattr(self, 'video_processor') and self.video_processor:
+                    self.video_processor.set_face_system(self.face_system)
+                
                 self.root.after(0, lambda: self.update_status("🟢 System Ready", "green"))
                 self.root.after(0, self.refresh_all_data)
             except Exception as e:
@@ -928,11 +1052,158 @@ class CanteenFaceDetectionGUI:
         cv2.imwrite(filepath, self.current_frame)
         messagebox.showinfo("Success", f"Screenshot saved: {filename}")
     
+    # Video Processing Methods
+    
+    def upload_video_file(self):
+        """Upload a video file to the processing queue"""
+        filepath = filedialog.askopenfilename(
+            title="Select Video File",
+            filetypes=[
+                ("Video files", "*.mp4 *.avi *.mov *.mkv *.flv"),
+                ("All files", "*.*")
+            ]
+        )
+        
+        if not filepath:
+            return
+        
+        # Upload to queue
+        success = self.video_processor.upload_video(filepath)
+        
+        if success:
+            messagebox.showinfo("Success", f"Video uploaded successfully!\n\n{os.path.basename(filepath)}")
+            self.refresh_video_queue()
+        else:
+            messagebox.showerror("Error", "Failed to upload video. Check if it's valid and not too long (max 10 minutes).")
+    
+    def toggle_video_processing(self):
+        """Start or stop video processing"""
+        if self.video_processor.is_running:
+            # Stop processing
+            self.video_processor.stop_processing()
+            self.video_start_btn.config(text="▶ Start Processing")
+            self.video_status_label.config(text="⚪ Stopped")
+        else:
+            # Start processing
+            if self.face_system is None:
+                messagebox.showerror("Error", "Face recognition system not initialized!")
+                return
+            
+            # Link face system to video processor
+            self.video_processor.set_face_system(self.face_system)
+            
+            # Start processing
+            self.video_processor.start_processing()
+            self.video_start_btn.config(text="⏹ Stop Processing")
+            self.video_status_label.config(text="🟢 Processing...")
+            
+            # Start  status update loop
+            self.update_video_status_loop()
+    
+    def refresh_video_queue(self):
+        """Refresh the video queue list"""
+        self.video_queue_listbox.delete(0, tk.END)
+        
+        videos = self.video_processor.scan_videos_folder()
+        
+        if not videos:
+            self.video_queue_listbox.insert(tk.END, "  No videos in queue")
+        else:
+            for video_path in videos:
+                filename = os.path.basename(video_path)
+                self.video_queue_listbox.insert(tk.END, f"  📹 {filename}")
+        
+        # Update pending count
+        status = self.video_processor.get_queue_status()
+        self.video_pending_label.config(text=f"Pending Videos: {status['pending_videos']}")
+    
+    def open_videos_folder(self):
+        """Open the videos folder in file explorer"""
+        videos_dir = self.video_processor.videos_dir
+        
+        if os.path.exists(videos_dir):
+            import subprocess
+            import platform
+            
+            if platform.system() == "Windows":
+                os.startfile(videos_dir)
+            elif platform.system() == "Darwin":  # macOS
+                subprocess.Popen(["open", videos_dir])
+            else:  # Linux
+                subprocess.Popen(["xdg-open", videos_dir])
+        else:
+            messagebox.showwarning("Warning", f"Videos folder does not exist:\n{videos_dir}")
+    
+    def on_video_status_update(self, status_text):
+        """Callback for video processor status updates"""
+        def update():
+            self.video_status_label.config(text=f"🟡 {status_text}")
+            self.refresh_video_queue()
+        
+        self.root.after(0, update)
+    
+    def on_video_recognition_update(self, name, timestamp, confidence):
+        """Callback for video recognition updates"""
+        def update():
+            result_text = f"{timestamp} - {name} ({confidence:.0%})"
+            self.video_results_listbox.insert(0, result_text)
+            
+            # Keep only last 100 results
+            if self.video_results_listbox.size() > 100:
+                self.video_results_listbox.delete(tk.END)
+        
+        self.root.after(0, update)
+    
+    def on_video_complete(self, video_name, stats):
+        """Callback when video processing completes"""
+        def update():
+            self.video_results_listbox.insert(0, "")
+            self.video_results_listbox.insert(0, f"✅ Completed: {video_name}")
+            self.video_results_listbox.insert(0, f"   Known: {stats['known_faces']}, Unknown: {stats['unknown_faces']}")
+            self.video_results_listbox.insert(0, "")
+            self.refresh_video_queue()
+            self.refresh_logs()  # Refresh logs tab to show new entries
+        
+        self.root.after(0, update)
+    
+    def update_video_status_loop(self):
+        """Periodically update video processing status"""
+        if self.video_processor.is_running:
+            status = self.video_processor.get_queue_status()
+            
+            # Update session stats
+            self.video_stat_processed.config(text=str(status['total_processed']))
+            self.video_stat_faces.config(text=str(status['total_faces_recognized']))
+            
+            # Update current video stats
+            current_stats = status['current_stats']
+            self.video_stat_frames.config(
+                text=f"{current_stats['processed_frames']}/{current_stats['total_frames']}"
+            )
+            self.video_stat_current_faces.config(
+                text=f"{current_stats['faces_detected']} detected"
+            )
+            
+            # Update current video name
+            if status['current_video']:
+                self.video_current_label.config(text=f"Current Video: {status['current_video']}")
+            else:
+                self.video_current_label.config(text="Current Video: None")
+            
+            # Schedule next update
+            self.root.after(1000, self.update_video_status_loop)
+    
     def on_closing(self):
         """Handle window close"""
         self.is_running = False
+        
+        # Stop video processor
+        if hasattr(self, 'video_processor') and self.video_processor:
+            self.video_processor.stop_processing()
+        
         if self.cap:
             self.cap.release()
+        
         self.root.destroy()
     
     def run(self):

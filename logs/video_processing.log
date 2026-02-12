@@ -1,0 +1,277 @@
+[2026-02-12 13:02:13] INFO: Video Processor Queue initialized
+[2026-02-12 13:02:17] INFO: Face recognition system linked to video processor
+[2026-02-12 13:03:09] INFO: Video uploaded: vid1.mp4
+[2026-02-12 13:03:18] INFO: Face recognition system linked to video processor
+[2026-02-12 13:03:18] INFO: Entering video processing loop...
+[2026-02-12 13:03:18] INFO: Video processing started
+[2026-02-12 13:03:18] INFO: ============================================================
+[2026-02-12 13:03:18] INFO: Processing video: vid1.mp4
+[2026-02-12 13:03:18] INFO: Duration: 00:00:11
+[2026-02-12 13:03:18] INFO: FPS: 29.80
+[2026-02-12 13:03:18] INFO: Resolution: 478x850
+[2026-02-12 13:03:18] INFO: Total frames: 349
+[2026-02-12 13:03:20] ERROR: Error processing video: unhashable type: 'dict'
+[2026-02-12 13:03:20] ERROR: Traceback (most recent call last):
+  File "C:\Users\benso\OneDrive\Desktop\desktop\folder (4)\fisat_face_detection_system\video_processor.py", line 270, in process_video
+    if name in last_recognition:
+       ^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: unhashable type: 'dict'
+
+[2026-02-12 13:03:20] WARNING: Failed to process: vid1.mp4
+[2026-02-12 13:03:22] INFO: ============================================================
+[2026-02-12 13:03:22] INFO: Processing video: vid1.mp4
+[2026-02-12 13:03:22] INFO: Duration: 00:00:11
+[2026-02-12 13:03:22] INFO: FPS: 29.80
+[2026-02-12 13:03:22] INFO: Resolution: 478x850
+[2026-02-12 13:03:22] INFO: Total frames: 349
+[2026-02-12 13:03:23] ERROR: Error processing video: unhashable type: 'dict'
+[2026-02-12 13:03:23] ERROR: Traceback (most recent call last):
+  File "C:\Users\benso\OneDrive\Desktop\desktop\folder (4)\fisat_face_detection_system\video_processor.py", line 270, in process_video
+    if name in last_recognition:
+       ^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: unhashable type: 'dict'
+
+[2026-02-12 13:03:23] WARNING: Failed to process: vid1.mp4
+[2026-02-12 13:03:25] INFO: ============================================================
+[2026-02-12 13:03:25] INFO: Processing video: vid1.mp4
+[2026-02-12 13:03:25] INFO: Duration: 00:00:11
+[2026-02-12 13:03:25] INFO: FPS: 29.80
+[2026-02-12 13:03:25] INFO: Resolution: 478x850
+[2026-02-12 13:03:25] INFO: Total frames: 349
+[2026-02-12 13:03:25] ERROR: Error processing video: unhashable type: 'dict'
+[2026-02-12 13:03:25] ERROR: Traceback (most recent call last):
+  File "C:\Users\benso\OneDrive\Desktop\desktop\folder (4)\fisat_face_detection_system\video_processor.py", line 270, in process_video
+    if name in last_recognition:
+       ^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: unhashable type: 'dict'
+
+[2026-02-12 13:03:25] WARNING: Failed to process: vid1.mp4
+[2026-02-12 13:03:27] INFO: ============================================================
+[2026-02-12 13:03:27] INFO: Processing video: vid1.mp4
+[2026-02-12 13:03:27] INFO: Duration: 00:00:11
+[2026-02-12 13:03:27] INFO: FPS: 29.80
+[2026-02-12 13:03:27] INFO: Resolution: 478x850
+[2026-02-12 13:03:27] INFO: Total frames: 349
+[2026-02-12 13:03:28] ERROR: Error processing video: unhashable type: 'dict'
+[2026-02-12 13:03:28] ERROR: Traceback (most recent call last):
+  File "C:\Users\benso\OneDrive\Desktop\desktop\folder (4)\fisat_face_detection_system\video_processor.py", line 270, in process_video
+    if name in last_recognition:
+       ^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: unhashable type: 'dict'
+
+[2026-02-12 13:03:28] WARNING: Failed to process: vid1.mp4
+[2026-02-12 13:03:30] INFO: ============================================================
+[2026-02-12 13:03:30] INFO: Processing video: vid1.mp4
+[2026-02-12 13:03:30] INFO: Duration: 00:00:11
+[2026-02-12 13:03:30] INFO: FPS: 29.80
+[2026-02-12 13:03:30] INFO: Resolution: 478x850
+[2026-02-12 13:03:30] INFO: Total frames: 349
+[2026-02-12 13:03:30] ERROR: Error processing video: unhashable type: 'dict'
+[2026-02-12 13:03:30] ERROR: Traceback (most recent call last):
+  File "C:\Users\benso\OneDrive\Desktop\desktop\folder (4)\fisat_face_detection_system\video_processor.py", line 270, in process_video
+    if name in last_recognition:
+       ^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: unhashable type: 'dict'
+
+[2026-02-12 13:03:30] WARNING: Failed to process: vid1.mp4
+[2026-02-12 13:03:32] INFO: ============================================================
+[2026-02-12 13:03:32] INFO: Processing video: vid1.mp4
+[2026-02-12 13:03:32] INFO: Duration: 00:00:11
+[2026-02-12 13:03:32] INFO: FPS: 29.80
+[2026-02-12 13:03:32] INFO: Resolution: 478x850
+[2026-02-12 13:03:32] INFO: Total frames: 349
+[2026-02-12 13:03:32] ERROR: Error processing video: unhashable type: 'dict'
+[2026-02-12 13:03:32] ERROR: Traceback (most recent call last):
+  File "C:\Users\benso\OneDrive\Desktop\desktop\folder (4)\fisat_face_detection_system\video_processor.py", line 270, in process_video
+    if name in last_recognition:
+       ^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: unhashable type: 'dict'
+
+[2026-02-12 13:03:32] WARNING: Failed to process: vid1.mp4
+[2026-02-12 13:03:34] INFO: ============================================================
+[2026-02-12 13:03:34] INFO: Processing video: vid1.mp4
+[2026-02-12 13:03:34] INFO: Duration: 00:00:11
+[2026-02-12 13:03:34] INFO: FPS: 29.80
+[2026-02-12 13:03:34] INFO: Resolution: 478x850
+[2026-02-12 13:03:34] INFO: Total frames: 349
+[2026-02-12 13:03:35] ERROR: Error processing video: unhashable type: 'dict'
+[2026-02-12 13:03:35] ERROR: Traceback (most recent call last):
+  File "C:\Users\benso\OneDrive\Desktop\desktop\folder (4)\fisat_face_detection_system\video_processor.py", line 270, in process_video
+    if name in last_recognition:
+       ^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: unhashable type: 'dict'
+
+[2026-02-12 13:03:35] WARNING: Failed to process: vid1.mp4
+[2026-02-12 13:03:37] INFO: ============================================================
+[2026-02-12 13:03:37] INFO: Processing video: vid1.mp4
+[2026-02-12 13:03:37] INFO: Duration: 00:00:11
+[2026-02-12 13:03:37] INFO: FPS: 29.80
+[2026-02-12 13:03:37] INFO: Resolution: 478x850
+[2026-02-12 13:03:37] INFO: Total frames: 349
+[2026-02-12 13:03:37] ERROR: Error processing video: unhashable type: 'dict'
+[2026-02-12 13:03:37] ERROR: Traceback (most recent call last):
+  File "C:\Users\benso\OneDrive\Desktop\desktop\folder (4)\fisat_face_detection_system\video_processor.py", line 270, in process_video
+    if name in last_recognition:
+       ^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: unhashable type: 'dict'
+
+[2026-02-12 13:03:37] WARNING: Failed to process: vid1.mp4
+[2026-02-12 13:03:39] INFO: ============================================================
+[2026-02-12 13:03:39] INFO: Processing video: vid1.mp4
+[2026-02-12 13:03:39] INFO: Duration: 00:00:11
+[2026-02-12 13:03:39] INFO: FPS: 29.80
+[2026-02-12 13:03:39] INFO: Resolution: 478x850
+[2026-02-12 13:03:39] INFO: Total frames: 349
+[2026-02-12 13:03:40] ERROR: Error processing video: unhashable type: 'dict'
+[2026-02-12 13:03:40] ERROR: Traceback (most recent call last):
+  File "C:\Users\benso\OneDrive\Desktop\desktop\folder (4)\fisat_face_detection_system\video_processor.py", line 270, in process_video
+    if name in last_recognition:
+       ^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: unhashable type: 'dict'
+
+[2026-02-12 13:03:40] WARNING: Failed to process: vid1.mp4
+[2026-02-12 13:03:42] INFO: ============================================================
+[2026-02-12 13:03:42] INFO: Processing video: vid1.mp4
+[2026-02-12 13:03:42] INFO: Duration: 00:00:11
+[2026-02-12 13:03:42] INFO: FPS: 29.80
+[2026-02-12 13:03:42] INFO: Resolution: 478x850
+[2026-02-12 13:03:42] INFO: Total frames: 349
+[2026-02-12 13:03:42] ERROR: Error processing video: unhashable type: 'dict'
+[2026-02-12 13:03:42] ERROR: Traceback (most recent call last):
+  File "C:\Users\benso\OneDrive\Desktop\desktop\folder (4)\fisat_face_detection_system\video_processor.py", line 270, in process_video
+    if name in last_recognition:
+       ^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: unhashable type: 'dict'
+
+[2026-02-12 13:03:42] WARNING: Failed to process: vid1.mp4
+[2026-02-12 13:03:44] INFO: ============================================================
+[2026-02-12 13:03:44] INFO: Processing video: vid1.mp4
+[2026-02-12 13:03:44] INFO: Duration: 00:00:11
+[2026-02-12 13:03:44] INFO: FPS: 29.80
+[2026-02-12 13:03:44] INFO: Resolution: 478x850
+[2026-02-12 13:03:44] INFO: Total frames: 349
+[2026-02-12 13:03:44] ERROR: Error processing video: unhashable type: 'dict'
+[2026-02-12 13:03:44] ERROR: Traceback (most recent call last):
+  File "C:\Users\benso\OneDrive\Desktop\desktop\folder (4)\fisat_face_detection_system\video_processor.py", line 270, in process_video
+    if name in last_recognition:
+       ^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: unhashable type: 'dict'
+
+[2026-02-12 13:03:44] WARNING: Failed to process: vid1.mp4
+[2026-02-12 13:03:46] INFO: ============================================================
+[2026-02-12 13:03:46] INFO: Processing video: vid1.mp4
+[2026-02-12 13:03:46] INFO: Duration: 00:00:11
+[2026-02-12 13:03:46] INFO: FPS: 29.80
+[2026-02-12 13:03:46] INFO: Resolution: 478x850
+[2026-02-12 13:03:46] INFO: Total frames: 349
+[2026-02-12 13:03:47] ERROR: Error processing video: unhashable type: 'dict'
+[2026-02-12 13:03:47] ERROR: Traceback (most recent call last):
+  File "C:\Users\benso\OneDrive\Desktop\desktop\folder (4)\fisat_face_detection_system\video_processor.py", line 270, in process_video
+    if name in last_recognition:
+       ^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: unhashable type: 'dict'
+
+[2026-02-12 13:03:47] WARNING: Failed to process: vid1.mp4
+[2026-02-12 13:03:49] INFO: ============================================================
+[2026-02-12 13:03:49] INFO: Processing video: vid1.mp4
+[2026-02-12 13:03:49] INFO: Duration: 00:00:11
+[2026-02-12 13:03:49] INFO: FPS: 29.80
+[2026-02-12 13:03:49] INFO: Resolution: 478x850
+[2026-02-12 13:03:49] INFO: Total frames: 349
+[2026-02-12 13:03:49] ERROR: Error processing video: unhashable type: 'dict'
+[2026-02-12 13:03:49] ERROR: Traceback (most recent call last):
+  File "C:\Users\benso\OneDrive\Desktop\desktop\folder (4)\fisat_face_detection_system\video_processor.py", line 270, in process_video
+    if name in last_recognition:
+       ^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: unhashable type: 'dict'
+
+[2026-02-12 13:03:49] WARNING: Failed to process: vid1.mp4
+[2026-02-12 13:03:51] INFO: ============================================================
+[2026-02-12 13:03:51] INFO: Processing video: vid1.mp4
+[2026-02-12 13:03:51] INFO: Duration: 00:00:11
+[2026-02-12 13:03:51] INFO: FPS: 29.80
+[2026-02-12 13:03:51] INFO: Resolution: 478x850
+[2026-02-12 13:03:51] INFO: Total frames: 349
+[2026-02-12 13:03:52] ERROR: Error processing video: unhashable type: 'dict'
+[2026-02-12 13:03:52] ERROR: Traceback (most recent call last):
+  File "C:\Users\benso\OneDrive\Desktop\desktop\folder (4)\fisat_face_detection_system\video_processor.py", line 270, in process_video
+    if name in last_recognition:
+       ^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: unhashable type: 'dict'
+
+[2026-02-12 13:03:52] WARNING: Failed to process: vid1.mp4
+[2026-02-12 13:03:54] INFO: ============================================================
+[2026-02-12 13:03:54] INFO: Processing video: vid1.mp4
+[2026-02-12 13:03:54] INFO: Duration: 00:00:11
+[2026-02-12 13:03:54] INFO: FPS: 29.80
+[2026-02-12 13:03:54] INFO: Resolution: 478x850
+[2026-02-12 13:03:54] INFO: Total frames: 349
+[2026-02-12 13:03:54] ERROR: Error processing video: unhashable type: 'dict'
+[2026-02-12 13:03:54] ERROR: Traceback (most recent call last):
+  File "C:\Users\benso\OneDrive\Desktop\desktop\folder (4)\fisat_face_detection_system\video_processor.py", line 270, in process_video
+    if name in last_recognition:
+       ^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: unhashable type: 'dict'
+
+[2026-02-12 13:03:54] WARNING: Failed to process: vid1.mp4
+[2026-02-12 13:03:56] INFO: ============================================================
+[2026-02-12 13:03:56] INFO: Processing video: vid1.mp4
+[2026-02-12 13:03:56] INFO: Duration: 00:00:11
+[2026-02-12 13:03:56] INFO: FPS: 29.80
+[2026-02-12 13:03:56] INFO: Resolution: 478x850
+[2026-02-12 13:03:56] INFO: Total frames: 349
+[2026-02-12 13:03:56] ERROR: Error processing video: unhashable type: 'dict'
+[2026-02-12 13:03:56] ERROR: Traceback (most recent call last):
+  File "C:\Users\benso\OneDrive\Desktop\desktop\folder (4)\fisat_face_detection_system\video_processor.py", line 270, in process_video
+    if name in last_recognition:
+       ^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: unhashable type: 'dict'
+
+[2026-02-12 13:03:56] WARNING: Failed to process: vid1.mp4
+[2026-02-12 13:03:58] INFO: ============================================================
+[2026-02-12 13:03:58] INFO: Processing video: vid1.mp4
+[2026-02-12 13:03:58] INFO: Duration: 00:00:11
+[2026-02-12 13:03:58] INFO: FPS: 29.80
+[2026-02-12 13:03:58] INFO: Resolution: 478x850
+[2026-02-12 13:03:58] INFO: Total frames: 349
+[2026-02-12 13:03:59] ERROR: Error processing video: unhashable type: 'dict'
+[2026-02-12 13:03:59] ERROR: Traceback (most recent call last):
+  File "C:\Users\benso\OneDrive\Desktop\desktop\folder (4)\fisat_face_detection_system\video_processor.py", line 270, in process_video
+    if name in last_recognition:
+       ^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: unhashable type: 'dict'
+
+[2026-02-12 13:03:59] WARNING: Failed to process: vid1.mp4
+[2026-02-12 13:04:01] INFO: Exited video processing loop
+[2026-02-12 13:04:01] INFO: Video processing stopped
+[2026-02-12 13:05:31] INFO: Video Processor Queue initialized
+[2026-02-12 13:05:33] INFO: Face recognition system linked to video processor
+[2026-02-12 13:06:33] INFO: Face recognition system linked to video processor
+[2026-02-12 13:06:33] INFO: Entering video processing loop...
+[2026-02-12 13:06:33] INFO: Video processing started
+[2026-02-12 13:06:33] INFO: ============================================================
+[2026-02-12 13:06:33] INFO: Processing video: vid1.mp4
+[2026-02-12 13:06:33] INFO: Duration: 00:00:11
+[2026-02-12 13:06:33] INFO: FPS: 29.80
+[2026-02-12 13:06:33] INFO: Resolution: 478x850
+[2026-02-12 13:06:33] INFO: Total frames: 349
+[2026-02-12 13:06:35] INFO: Recognized: benz (124) at 00:00:00 (confidence: 0.44)
+[2026-02-12 13:06:35] INFO: Recognized: Ash (49) at 00:00:00 (confidence: 0.47)
+[2026-02-12 13:06:39] INFO: Progress: 28.7% (100/349 frames)
+[2026-02-12 13:06:39] INFO: Progress: 57.3% (200/349 frames)
+[2026-02-12 13:06:40] INFO: Recognized: NASA (395) at 00:00:08 (confidence: 0.40)
+[2026-02-12 13:06:41] INFO: Progress: 86.0% (300/349 frames)
+[2026-02-12 13:06:41] INFO: ------------------------------------------------------------
+[2026-02-12 13:06:41] INFO: Completed: vid1.mp4
+[2026-02-12 13:06:41] INFO: Total frames: 349
+[2026-02-12 13:06:41] INFO: Processed frames: 34
+[2026-02-12 13:06:41] INFO: Faces detected: 16
+[2026-02-12 13:06:41] INFO: Known faces: 3
+[2026-02-12 13:06:41] INFO: Unknown faces: 0
+[2026-02-12 13:06:41] INFO: Unique people recognized: 3
+[2026-02-12 13:06:41] INFO: Video marked as processed: vid1_done.mp4
+[2026-02-12 13:06:41] INFO: Moved to: C:\Users\benso\OneDrive\Desktop\desktop\folder (4)\fisat_face_detection_system\processed_videos
+[2026-02-12 13:06:43] INFO: No new videos found. Waiting for 60 seconds...
+[2026-02-12 13:07:43] INFO: No new videos found. Waiting for 60 seconds...
+[2026-02-12 13:08:43] INFO: No new videos found. Waiting for 60 seconds...
+[2026-02-12 13:09:43] INFO: No new videos found. Waiting for 60 seconds...

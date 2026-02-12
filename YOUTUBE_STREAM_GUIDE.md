@@ -75,6 +75,7 @@ YOUTUBE_QUALITY = "best[height<=720]" # Stream quality
 ```
 
 ### Quality Options:
+
 - `"best"` - Best available quality
 - `"worst"` - Lowest quality (fastest)
 - `"best[height<=720]"` - Best quality up to 720p (recommended)
@@ -85,18 +86,21 @@ YOUTUBE_QUALITY = "best[height<=720]" # Stream quality
 ## 🔄 Switching Between Modes
 
 ### To use YouTube stream:
+
 ```python
 USE_YOUTUBE = True
 USE_RTSP = False
 ```
 
 ### To use RTSP stream:
+
 ```python
 USE_YOUTUBE = False
 USE_RTSP = True
 ```
 
 ### To use webcam:
+
 ```python
 USE_YOUTUBE = False
 USE_RTSP = False
@@ -117,6 +121,7 @@ python test_youtube_stream.py "https://www.youtube.com/watch?v=YOUR_ID"
 ```
 
 The test will verify:
+
 - ✓ Stream extraction from YouTube
 - ✓ OpenCV can open the stream
 - ✓ Frames can be read successfully
@@ -136,17 +141,20 @@ The test will verify:
 ## 🐛 Troubleshooting
 
 ### "Could not connect to YouTube stream"
+
 - Check internet connection
 - Verify the YouTube URL is accessible
 - Try a different video/stream
 - Test with: `python test_youtube_stream.py "your_url"`
 
 ### "Stream lost and reconnection failed"
+
 - YouTube may have throttled the connection
 - Try restarting the application
 - Consider using a different video quality
 
 ### Slow/laggy performance
+
 - Lower the quality in config.py: `YOUTUBE_QUALITY = "best[height<=480]"`
 - Increase `PROCESS_EVERY_N_FRAMES` in config.py
 
@@ -157,6 +165,7 @@ The test will verify:
 To re-enable RTSP (original configuration):
 
 1. Edit **config.py**:
+
 ```python
 USE_YOUTUBE = False
 USE_RTSP = True

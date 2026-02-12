@@ -45,7 +45,7 @@ RTSP_BUFFER_SIZE = 1  # Buffer size (lower = less latency)
 RTSP_TRANSPORT = "tcp"  # tcp or udp (tcp is more reliable)
 
 # YouTube Stream settings
-USE_YOUTUBE = True  # Set to True to use YouTube stream as camera feed
+USE_YOUTUBE = False  # Set to True to use YouTube stream as camera feed
 YOUTUBE_URL = "https://youtube.com/live/Vr-ocieh1oo"  # lofi hip hop radio - 24/7 live stream (default test)
 # Replace with your own YouTube stream URL:
 # YOUTUBE_URL = "https://www.youtube.com/watch?v=YOUR_VIDEO_ID"
@@ -55,8 +55,24 @@ YOUTUBE_RECONNECT_ATTEMPTS = 3  # Number of reconnection attempts
 YOUTUBE_RECONNECT_DELAY = 3  # Seconds between reconnection attempts
 YOUTUBE_QUALITY = "best[height<=720]"  # Video quality (best, worst, best[height<=720], etc.)
 
+# Video File settings
+USE_VIDEO_FILE = True  # Set to True to use a pre-downloaded video file
+VIDEO_FILE_PATH = "database/vid1.mp4"  # Path to video file (relative or absolute)
+# Examples:
+# VIDEO_FILE_PATH = "videos/sample.mp4"  # Relative path
+# VIDEO_FILE_PATH = r"C:\Users\Videos\my_video.mp4"  # Absolute path (Windows)
+# VIDEO_FILE_PATH = "/home/user/videos/sample.mp4"  # Absolute path (Linux/Mac)
+VIDEO_LOOP = False  # Set to True to loop the video when it ends
+
 # UI settings
 WINDOW_TITLE = "College Canteen Face Detection System"
 
 # Time settings
 MIN_TIME_BETWEEN_LOGS = 30  # Minimum seconds between logging same person
+
+# Video Processing Queue settings
+VIDEO_FRAME_SKIP_INTERVAL = 10  # Process 1 frame every N frames (10 = faster processing)
+VIDEO_MAX_DURATION = 10 * 60  # Maximum video duration in seconds (10 minutes)
+VIDEO_SUPPORTED_FORMATS = ['.mp4', '.avi', '.mov', '.mkv', '.flv']  # Supported video formats
+VIDEO_AUTO_WAIT_ENABLED = True  # Automatically wait and rescan when no videos found
+VIDEO_WAIT_INTERVAL = 60  # Seconds to wait before rescanning empty folder
