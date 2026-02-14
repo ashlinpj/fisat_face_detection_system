@@ -23,6 +23,7 @@ Accuracy features
 import os
 import cv2
 import time
+import queue
 import threading
 import logging
 import numpy as np
@@ -289,14 +290,92 @@ class VideoProcessorQueue:
         next_track_id = 0
         IOU_MATCH = 0.30
 
+        # ══════════════════════════════════════════════════════════
+        #  ASYNC RECOGNITION (live-feed style)
+        #  Background workers handle the slow embed+match so the
+        #  main loop stays fast and the preview stays responsive.
+        #  Tune VIDEO_RECOGNITION_WORKERS in config.py (default 2).
+        # ══════════════════════════════════════════════════════════
+        _recognition_q = queue.Queue(maxsize=16)
+        _recognition_cache: Dict[int, dict] = {}   # track_id → result
+        _cache_lock = threading.Lock()
+        _workers_alive = [True]                     # mutable flag for workers
+        DISPLAY_CONF = getattr(config, "VIDEO_DISPLAY_CONFIDENCE", 0.70)
+        NUM_WORKERS  = getattr(config, "VIDEO_RECOGNITION_WORKERS", 2)
+        RECHECK_EVERY = getattr(config, "VIDEO_RECHECK_INTERVAL", 5)
+
+        def _recog_worker():
+            """Background: enhance → embed → match → cache result.
+            Uses the SAME full enhance_face() as the live feed for accuracy."""
+            while _workers_alive[0]:
+                try:
+                    item = _recognition_q.get(timeout=0.2)
+                    if item is None:
+                        continue
+                    tid = item["track_id"]
+                    fc  = item["face_crop"]
+
+                    # Use full enhancement (same as live feed recognition thread)
+                    face_enh = self.face_system.enhance_face(fc)
+                    emb = self.face_system.get_face_embedding(face_enh)
+                    if emb is None:
+                        with _cache_lock:
+                            _recognition_cache[tid] = {
+                                "name": "Unknown", "student_id": None,
+                                "student_db_id": None, "confidence": 0.0,
+                            }
+                        continue
+
+                    rec_thr = getattr(config, 'FACE_RECOGNITION_THRESHOLD', 0.35)
+                    bm = find_best_match(
+                        emb, self.face_system.known_faces,
+                        threshold=rec_thr, margin=0.15,
+                    )
+                    cv_score = 0.0
+                    if bm is not None and bm.get('face_embedding') is not None:
+                        cv_score = cosine_similarity(emb, bm['face_embedding'])
+
+                    if bm is not None and cv_score >= CONFIDENCE_FLOOR:
+                        res = {"name": bm.get("name", "Unknown"),
+                               "student_id": bm.get("student_id"),
+                               "student_db_id": bm.get("id"),
+                               "confidence": cv_score}
+                    else:
+                        res = {"name": "Unknown", "student_id": None,
+                               "student_db_id": None, "confidence": cv_score}
+
+                    with _cache_lock:
+                        _recognition_cache[tid] = res
+
+                except queue.Empty:
+                    continue
+                except Exception as exc:
+                    logging.error(f"Recognition worker error: {exc}")
+
+        _workers = []
+        for _ in range(NUM_WORKERS):
+            _w = threading.Thread(target=_recog_worker, daemon=True)
+            _w.start()
+            _workers.append(_w)
+        logging.info(f"Started {NUM_WORKERS} async recognition workers")
+
         try:
             cap = cv2.VideoCapture(video_path)
             if not cap.isOpened():
                 logging.error(f"Cannot open video: {video_path}")
+                _workers_alive[0] = False
                 self.is_processing = False
                 return False
 
             frame_number = 0
+            processed_count = 0
+            track_last_queued: Dict[int, int] = {}   # track_id → last processed_count queued
+
+            # ── Real-time playback pacing ─────────────────────────
+            # Sleep between processed frames so preview matches real
+            # video speed instead of fast-forwarding.
+            frame_interval = self.frame_skip_interval / metadata["fps"] if metadata["fps"] > 0 else 0.1
+            last_frame_time = time.time()
 
             while cap.isOpened() and self.is_running:
                 ret, frame = cap.read()
@@ -305,10 +384,18 @@ class VideoProcessorQueue:
 
                 frame_number += 1
 
-                # skip frames for speed (process ~1 fps)
+                # skip frames for speed
                 if frame_number % self.frame_skip_interval != 0:
                     continue
 
+                # Pace playback to real-time
+                now = time.time()
+                elapsed_since_last = now - last_frame_time
+                if elapsed_since_last < frame_interval:
+                    time.sleep(frame_interval - elapsed_since_last)
+                last_frame_time = time.time()
+
+                processed_count += 1
                 self.current_video_stats["processed_frames"] += 1
                 video_ts_sec = frame_number / metadata["fps"]
                 video_ts = self.format_timestamp(video_ts_sec)
@@ -317,15 +404,14 @@ class VideoProcessorQueue:
                 if not self.face_system:
                     continue
 
+                # ── FAST: face detection (~5-15 ms with DNN) ──────
                 faces = self.face_system.detect_faces(frame)
 
-                # Build per-frame visualization data list
                 frame_face_data: List[Dict] = []
 
                 if not faces:
                     for tid in tracks:
                         tracks[tid]["consecutive"] = 0
-                    # Update vis data (frame ref only – no copy needed for empty frames)
                     if frame_number % (self.frame_skip_interval * 3) == 0:
                         with self._frame_lock:
                             self.current_frame_data = {
@@ -338,13 +424,13 @@ class VideoProcessorQueue:
                     continue
 
                 self.current_video_stats["faces_detected"] += len(faces)
-                matched_tracks = set()
+                matched_track_ids = set()
                 img_h, img_w = frame.shape[:2]
 
                 for bbox in faces:
                     x1, y1, x2, y2 = bbox
 
-                    # Crop with padding (same as webcam process_frame)
+                    # Crop with padding
                     pad = int((x2 - x1) * 0.3)
                     cx1 = max(0, x1 - pad)
                     cy1 = max(0, y1 - pad)
@@ -361,48 +447,10 @@ class VideoProcessorQueue:
                         })
                         continue
 
-                    # Fast enhance (skip expensive denoise + PIL round-trip)
-                    face_enhanced = _enhance_face_fast(face_crop)
-
-                    # ── Same recognition logic as live detection thread ──
-                    # Step 1: get embedding from enhanced face
-                    embedding = self.face_system.get_face_embedding(face_enhanced)
-                    if embedding is None:
-                        frame_face_data.append({
-                            "bbox": bbox, "name": "Unknown", "status": "unknown",
-                            "confidence": 0.0,
-                        })
-                        continue
-
-                    # Step 2: find_best_match with margin (same as recognition_worker)
-                    rec_threshold = getattr(config, 'FACE_RECOGNITION_THRESHOLD', 0.35)
-                    best_match = find_best_match(
-                        embedding,
-                        self.face_system.known_faces,
-                        threshold=rec_threshold,
-                        margin=0.15,
-                    )
-
-                    # Step 3: compute cosine similarity score
-                    conf_val = 0.0
-                    if best_match is not None and best_match.get('face_embedding') is not None:
-                        conf_val = cosine_similarity(embedding, best_match['face_embedding'])
-
-                    student = best_match
-
-                    if student is not None and conf_val >= CONFIDENCE_FLOOR:
-                        pred_id = student.get("student_id", "Unknown")
-                        pred_name = student.get("name", "Unknown")
-                        pred_dbid = student.get("id")
-                    else:
-                        pred_id = None
-                        pred_name = "Unknown"
-                        pred_dbid = None
-
-                    # Match to existing track by IoU
+                    # ── FAST: IoU match to existing track (~0 ms) ─
                     best_tid, best_iou = None, 0.0
                     for tid, trk in tracks.items():
-                        if tid in matched_tracks:
+                        if tid in matched_track_ids:
                             continue
                         iou = self._bbox_iou(bbox, trk["last_bbox"])
                         if iou > best_iou:
@@ -424,20 +472,59 @@ class VideoProcessorQueue:
                     trk = tracks[tid]
                     trk["last_bbox"] = bbox
                     trk["last_ts"] = video_ts
+                    matched_track_ids.add(tid)
 
-                    if pred_id == trk["last_prediction"] and pred_id is not None:
-                        trk["consecutive"] += 1
+                    # ── Queue for ASYNC recognition if needed ─────
+                    # Only queue when: (a) never recognised, or
+                    # (b) low confidence and enough frames passed.
+                    with _cache_lock:
+                        cached = _recognition_cache.get(tid)
+                    last_q = track_last_queued.get(tid, -999)
+                    needs_recog = (
+                        cached is None
+                        or (cached["confidence"] < DISPLAY_CONF
+                            and (processed_count - last_q) >= RECHECK_EVERY)
+                    )
+                    if needs_recog:
+                        try:
+                            _recognition_q.put_nowait({
+                                "track_id": tid,
+                                "face_crop": face_crop.copy(),
+                            })
+                            track_last_queued[tid] = processed_count
+                        except queue.Full:
+                            pass  # workers busy – will retry next interval
+
+                    # ── Read cached result for display ────────────
+                    # Check if cache changed since last vote for this track
+                    # (only vote on FRESH recognitions, not stale repeats)
+                    if cached is not None:
+                        pred_name = cached["name"]
+                        pred_id   = cached["student_id"]
+                        pred_dbid = cached["student_db_id"]
+                        conf_val  = cached["confidence"]
                     else:
-                        trk["consecutive"] = 1 if pred_id is not None else 0
-                    trk["last_prediction"] = pred_id
+                        pred_name = "Detecting..."
+                        pred_id   = None
+                        pred_dbid = None
+                        conf_val  = 0.0
 
-                    trk["votes"].append(pred_id)
-                    trk["confs"].append(conf_val)
-                    trk["names"].append(pred_name)
-                    trk["db_ids"].append(pred_dbid)
-                    matched_tracks.add(tid)
+                    # Only add vote when we queued a new recognition this frame
+                    # (prevents stale cached results from inflating vote counts)
+                    fresh_recognition = (needs_recog and cached is not None)
+                    if fresh_recognition:
+                        if pred_id == trk["last_prediction"] and pred_id is not None:
+                            trk["consecutive"] += 1
+                        else:
+                            trk["consecutive"] = 1 if pred_id is not None else 0
+                        trk["last_prediction"] = pred_id
 
-                    # Determine visualization status for this face
+                        trk["votes"].append(pred_id)
+                        trk["confs"].append(conf_val)
+                        trk["names"].append(pred_name)
+                        trk["db_ids"].append(pred_dbid)
+
+                    # Visualization status
                     if pred_id is None:
                         vis_status = "unknown"
                     elif trk["consecutive"] >= MIN_CONSECUTIVE_FRAMES:
@@ -445,25 +532,26 @@ class VideoProcessorQueue:
                     else:
                         vis_status = "pending"
 
+                    # Only show name when confidence >= 0.70
+                    display_name = pred_name if conf_val >= DISPLAY_CONF else "Unknown"
+
                     frame_face_data.append({
                         "bbox": bbox,
-                        "name": pred_name,
+                        "name": display_name,
                         "status": vis_status,
                         "confidence": conf_val,
                     })
 
                 # Decay unmatched
                 for tid in tracks:
-                    if tid not in matched_tracks:
+                    if tid not in matched_track_ids:
                         tracks[tid]["consecutive"] = 0
 
                 # ── expose frame for visualization (thread-safe) ──
-                # Downscale before copying to reduce memory + time
                 preview_w = getattr(config, "VIDEO_PREVIEW_WIDTH", 640)
                 scale_x = preview_w / frame.shape[1]
                 ph = int(frame.shape[0] * scale_x)
                 preview = cv2.resize(frame, (preview_w, ph), interpolation=cv2.INTER_NEAREST)
-                # Rescale bbox coords to preview size
                 scaled_face_data = []
                 for fd in frame_face_data:
                     bx1, by1, bx2, by2 = fd["bbox"]
@@ -486,6 +574,18 @@ class VideoProcessorQueue:
                     self.on_status_update(f"Processing: {video_name}  ({progress_pct:.0f}%)")
                 if frame_number % (self.frame_skip_interval * 50) == 0:
                     logging.info(f"Progress: {progress_pct:.1f}% ({frame_number}/{metadata['frame_count']})")
+
+            # ── Drain recognition queue before post-processing ────
+            # Give workers a moment to finish remaining items
+            _drain_deadline = time.time() + 3.0
+            while not _recognition_q.empty() and time.time() < _drain_deadline:
+                time.sleep(0.1)
+
+            # ── Stop recognition workers ──────────────────────────
+            _workers_alive[0] = False
+            for _w in _workers:
+                _w.join(timeout=2)
+            logging.info("Recognition workers stopped")
 
             cap.release()
 

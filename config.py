@@ -84,9 +84,10 @@ VIDEO_WATCH_FOLDER = r"C:\cctv_storage\cam1"
 VIDEO_PROCESSING_DIR = os.path.join(BASE_DIR, "processing")
 VIDEO_ERROR_DIR = os.path.join(BASE_DIR, "error")
 # File stability: file must not change size for this many seconds before processing
-VIDEO_STABILITY_WAIT_SECONDS = 60
+# Set to 0 to skip the stability check entirely (process immediately)
+VIDEO_STABILITY_WAIT_SECONDS = 0
 # How often to re-check file size during stability wait (seconds)
-VIDEO_STABILITY_CHECK_INTERVAL = 10
+VIDEO_STABILITY_CHECK_INTERVAL = 5
 # How often to scan the watch folder when idle (seconds)
 VIDEO_SCAN_INTERVAL = 60
 
@@ -97,6 +98,11 @@ VIDEO_VOTE_RATIO = 0.40            # ≥40 % of track votes for identity to conf
 VIDEO_CONFIDENCE_FLOOR = 0.50      # Ignore recognitions below this confidence
 VIDEO_RECOGNITION_THRESHOLD = 0.38 # DeepFace cosine distance threshold
 
+# ── Async Video Recognition (live-feed style) ──
+VIDEO_DISPLAY_CONFIDENCE = 0.70    # Only show name if confidence >= this (0.70 = 70%)
+VIDEO_RECOGNITION_WORKERS = 2      # Background threads for embed+match (2 = good default)
+VIDEO_RECHECK_INTERVAL = 5         # Re-queue a tracked face every N processed frames if low-conf
+
 # ── Video Tab Visualization settings ──
-VIDEO_PREVIEW_FPS = 5              # Max FPS for GUI frame preview (avoid lag)
+VIDEO_PREVIEW_FPS = 10             # Max FPS for GUI frame preview (was 5, now faster)
 VIDEO_PREVIEW_WIDTH = 640          # Preview display width in pixels
