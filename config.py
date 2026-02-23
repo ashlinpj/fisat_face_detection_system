@@ -65,7 +65,7 @@ VIDEO_FILE_PATH = "database/vid1.mp4"  # Path to video file (relative or absolut
 VIDEO_LOOP = False  # Set to True to loop the video when it ends
 
 # UI settings
-WINDOW_TITLE = "College Canteen Face Detection System"
+WINDOW_TITLE = "College Face Detection System"
 
 # Time settings
 MIN_TIME_BETWEEN_LOGS = 30  # Minimum seconds between logging same person
