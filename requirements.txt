@@ -16,6 +16,9 @@ tensorflow>=2.13.0
 # GUI
 tk>=0.1.0
 
+# Web GUI
+flask>=3.0.0
+
 # Database (built-in with Python, just for reference)
 # sqlite3 - included in Python standard library
 
