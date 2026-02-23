@@ -661,6 +661,8 @@ class FaceRecognitionSystem:
         except queue.Empty:
             pass
         
+        recognized_people: List[dict] = []
+
         # STEP 4: Draw detection boxes with names
         for (x1, y1, x2, y2) in faces:
             # Find matching recognized face (with some tolerance for position changes)
@@ -691,6 +693,13 @@ class FaceRecognitionSystem:
                 confidence = best_match['confidence']
                 is_known = best_match.get('is_known', False)
                 color = (0, 255, 0) if is_known else (0, 0, 255)  # Green for known, Red for unknown
+
+            recognized_people.append({
+                'name': name_to_display,
+                'confidence': confidence,
+                'is_known': is_known,
+                'bbox': (x1, y1, x2, y2)
+            })
             
             # Draw rectangle
             cv2.rectangle(annotated_frame, (x1, y1), (x2, y2), color, 2)
@@ -714,7 +723,7 @@ class FaceRecognitionSystem:
         cv2.putText(annotated_frame, current_time.strftime("%H:%M:%S"),
                     (10, 25), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
         
-        return annotated_frame, []
+        return annotated_frame, recognized_people
 
     def save_visit_screenshot(self, face_crop: np.ndarray, student: dict) -> str:
         """Save enhanced face screenshot for visit log"""

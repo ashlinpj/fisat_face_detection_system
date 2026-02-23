@@ -6,6 +6,7 @@ Modern Tkinter-based graphical user interface
 import tkinter as tk
 from tkinter import ttk, messagebox, filedialog
 import cv2
+import numpy as np
 from PIL import Image, ImageTk
 import threading
 import os
@@ -490,19 +491,108 @@ class CanteenFaceDetectionGUI:
                 frame_count = 0
                 start_time = time.time()
             
-            # Convert for display
-            annotated_frame = cv2.cvtColor(annotated_frame, cv2.COLOR_BGR2RGB)
-            
-            # Resize for display - smaller size for better screen fit
-            # Use INTER_LINEAR for better quality when downscaling
-            display_width = 640
-            h, w = annotated_frame.shape[:2]
-            scale = display_width / w
-            display_height = int(h * scale)
-            annotated_frame = cv2.resize(annotated_frame, (display_width, display_height), interpolation=cv2.INTER_LINEAR)
+            # Create display based on SHOW_WINDOW setting
+            if config.SHOW_WINDOW:
+                # Show camera feed with annotations
+                # Convert for display
+                display_frame = cv2.cvtColor(annotated_frame, cv2.COLOR_BGR2RGB)
+                
+                # Resize for display - smaller size for better screen fit
+                display_width = 640
+                h, w = display_frame.shape[:2]
+                scale = display_width / w
+                display_height = int(h * scale)
+                display_frame = cv2.resize(display_frame, (display_width, display_height), interpolation=cv2.INTER_LINEAR)
+            else:
+                # When SHOW_WINDOW is False, show names only (no camera feed)
+                # Create a display with detected names in big text
+                display_width = 640
+                display_height = 480
+                display_frame = np.zeros((display_height, display_width, 3), dtype=np.uint8)
+                display_frame[:] = (30, 30, 30)  # Dark gray background
+                
+                # Get list of detected names
+                detected_names = []
+                for p in recognized_people:
+                    if p.get('is_known') and p.get('name'):
+                        detected_names.append(p['name'])
+                    elif not p.get('is_known'):
+                        detected_names.append('Unknown Person')
+                
+                # Remove duplicates while preserving order
+                unique_names = list(dict.fromkeys(detected_names))
+                
+                # Title
+                cv2.putText(
+                    display_frame,
+                    "People Detected",
+                    (display_width // 2 - 150, 50),
+                    cv2.FONT_HERSHEY_SIMPLEX,
+                    1.2,
+                    (255, 255, 255),
+                    2
+                )
+                
+                # Draw a line under title
+                cv2.line(display_frame, (40, 70), (display_width - 40, 70), (100, 100, 100), 2)
+                
+                # Display names in big text
+                if unique_names:
+                    y_offset = 120
+                    for i, name in enumerate(unique_names):
+                        # Alternate colors for better visibility
+                        color = (100, 255, 100) if 'Unknown' not in name else (100, 150, 255)
+                        
+                        cv2.putText(
+                            display_frame,
+                            f"{i+1}. {name}",
+                            (80, y_offset),
+                            cv2.FONT_HERSHEY_SIMPLEX,
+                            1.0,
+                            color,
+                            2
+                        )
+                        y_offset += 55
+                        
+                        # If too many names, show count
+                        if y_offset > display_height - 100:
+                            remaining = len(unique_names) - i - 1
+                            if remaining > 0:
+                                cv2.putText(
+                                    display_frame,
+                                    f"... and {remaining} more",
+                                    (80, y_offset),
+                                    cv2.FONT_HERSHEY_SIMPLEX,
+                                    0.8,
+                                    (150, 150, 150),
+                                    2
+                                )
+                            break
+                else:
+                    # No people detected
+                    cv2.putText(
+                        display_frame,
+                        "No people detected",
+                        (display_width // 2 - 150, display_height // 2),
+                        cv2.FONT_HERSHEY_SIMPLEX,
+                        1.0,
+                        (150, 150, 150),
+                        2
+                    )
+                
+                # Add FPS and count at bottom
+                cv2.putText(
+                    display_frame,
+                    f"FPS: {fps:.1f} | Total: {len(unique_names)}",
+                    (display_width // 2 - 100, display_height - 20),
+                    cv2.FONT_HERSHEY_SIMPLEX,
+                    0.6,
+                    (200, 200, 200),
+                    1
+                )
             
             # Convert to PhotoImage with high quality
-            img = Image.fromarray(annotated_frame)
+            img = Image.fromarray(display_frame)
             imgtk = ImageTk.PhotoImage(image=img)
             
             # Update UI
@@ -540,7 +630,7 @@ class CanteenFaceDetectionGUI:
         
         dialog = tk.Toplevel(self.root)
         dialog.title("Register New Student")
-        dialog.geometry("400x300")
+        dialog.geometry("400x500")
         dialog.transient(self.root)
         dialog.grab_set()
         
