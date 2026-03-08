@@ -1,20 +1,41 @@
-"""
-Database module for Face Detection System
-Handles all database operations including student records and visit logs
-"""
+"""Database module for Face Detection System"""
 
 import sqlite3
 import os
 import json
+import re
 import numpy as np
 from datetime import datetime
-from typing import Optional, List, Tuple
+from typing import Optional, List
 import config
+
+
+# Custom Exceptions
+class DatabaseError(Exception):
+    """Base exception for database operations"""
+    pass
+
+
+class StudentNotFoundError(DatabaseError):
+    """Student not found in database"""
+    pass
+
+
+class DuplicateStudentError(DatabaseError):
+    """Student already exists in database"""
+    pass
+
+
+class InvalidInputError(DatabaseError):
+    """Invalid input data"""
+    pass
+
 
 def ensure_directories():
     """Create necessary directories if they don't exist"""
     os.makedirs(os.path.dirname(config.DATABASE_PATH), exist_ok=True)
     os.makedirs(config.FACES_DIR, exist_ok=True)
+
 
 def get_connection():
     """Get database connection"""
@@ -23,12 +44,33 @@ def get_connection():
     conn.row_factory = sqlite3.Row
     return conn
 
+
+def sanitize_student_id(student_id: str) -> str:
+    """
+    Sanitize student ID to prevent path traversal and invalid filenames.
+    
+    Parameters
+    ----------
+    student_id : str
+        Raw student ID input
+        
+    Returns
+    -------
+    str
+        Sanitized student ID (alphanumeric, dash, underscore only)
+    """
+    # Remove any character that isn't alphanumeric, dash, or underscore
+    sanitized = re.sub(r'[^a-zA-Z0-9_-]', '_', student_id)
+    
+    # Limit length
+    return sanitized[:20]
+
+
 def init_database():
     """Initialize database with required tables"""
     conn = get_connection()
     cursor = conn.cursor()
     
-    # Students table - stores student information and face embeddings
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS students (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -43,7 +85,6 @@ def init_database():
         )
     ''')
     
-    # Visit logs table - tracks canteen visits
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS visit_logs (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -60,7 +101,6 @@ def init_database():
         )
     ''')
     
-    # Unknown faces table - stores unrecognized faces for later registration
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS unknown_faces (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -76,71 +116,171 @@ def init_database():
     conn.close()
     print("Database initialized successfully!")
 
+
 def add_student(student_id: str, name: str, department: str, year: int, 
                 face_embedding: np.ndarray, face_image_path: str) -> bool:
-    """Add a new student to the database"""
+    """
+    Add a new student to the database.
+    
+    Parameters
+    ----------
+    student_id : str
+        Unique student identifier
+    name : str
+        Full name of the student
+    department : str
+        Department code
+    year : int
+        Year of study
+    face_embedding : np.ndarray
+        Face embedding vector
+    face_image_path : str
+        Path to stored face image
+        
+    Returns
+    -------
+    bool
+        True if successful, False otherwise
+        
+    Raises
+    ------
+    DuplicateStudentError
+        If student_id already exists
+    InvalidInputError
+        If input validation fails
+    """
+    # Validate inputs
+    if not student_id or not name:
+        raise InvalidInputError("Student ID and name are required")
+    
+    if year and (year < 1 or year > 10):
+        raise InvalidInputError("Year must be between 1 and 10")
+    
+    # Sanitize student_id to prevent path traversal
+    student_id = sanitize_student_id(student_id)
+    
+    conn = None
     try:
         conn = get_connection()
         cursor = conn.cursor()
         
-        # Convert embedding to JSON string for storage
-        embedding_json = json.dumps(face_embedding.tolist())
+        # Check for existing student
+        cursor.execute('SELECT id FROM students WHERE student_id = ?', (student_id,))
+        if cursor.fetchone():
+            raise DuplicateStudentError(f"Student {student_id} already exists")
         
+        embedding_json = json.dumps(face_embedding.tolist())
         cursor.execute('''
             INSERT INTO students (student_id, name, department, year, face_embedding, face_image_path)
             VALUES (?, ?, ?, ?, ?, ?)
         ''', (student_id, name, department, year, embedding_json, face_image_path))
-        
         conn.commit()
-        conn.close()
         print(f"Student {name} ({student_id}) added successfully!")
         return True
-    except sqlite3.IntegrityError:
-        print(f"Student ID {student_id} already exists!")
-        return False
-    except Exception as e:
-        print(f"Error adding student: {e}")
-        return False
+        
+    except sqlite3.IntegrityError as e:
+        raise DuplicateStudentError(f"Student {student_id} already exists: {str(e)}")
+    except sqlite3.Error as e:
+        raise DatabaseError(f"Database error adding student: {str(e)}")
+    finally:
+        if conn:
+            conn.close()
 
 def get_all_students() -> List[dict]:
-    """Get all students from database"""
-    conn = get_connection()
-    cursor = conn.cursor()
+    """
+    Get all students from database.
     
-    cursor.execute('SELECT * FROM students ORDER BY name')
-    rows = cursor.fetchall()
-    
-    students = []
-    for row in rows:
-        student = dict(row)
-        if student['face_embedding']:
-            student['face_embedding'] = np.array(json.loads(student['face_embedding']))
-        students.append(student)
-    
-    conn.close()
-    return students
+    Returns
+    -------
+    List[dict]
+        List of student dictionaries with face embeddings
+        
+    Raises
+    ------
+    DatabaseError
+        If database query fails
+    """
+    conn = None
+    try:
+        conn = get_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute('SELECT * FROM students ORDER BY name')
+        rows = cursor.fetchall()
+        
+        students = []
+        for row in rows:
+            student = dict(row)
+            if student['face_embedding']:
+                try:
+                    student['face_embedding'] = np.array(json.loads(student['face_embedding']))
+                except (json.JSONDecodeError, ValueError) as e:
+                    print(f"Warning: Invalid embedding for student {student.get('student_id')}: {e}")
+                    student['face_embedding'] = None
+            students.append(student)
+        
+        return students
+        
+    except sqlite3.Error as e:
+        raise DatabaseError(f"Database error retrieving students: {str(e)}")
+    finally:
+        if conn:
+            conn.close()
 
 def get_student_by_id(student_id: str) -> Optional[dict]:
-    """Get student by student ID"""
-    conn = get_connection()
-    cursor = conn.cursor()
+    """
+    Get student by student ID.
     
-    cursor.execute('SELECT * FROM students WHERE student_id = ?', (student_id,))
-    row = cursor.fetchone()
+    Parameters
+    ----------
+    student_id : str
+        Student identifier
+        
+    Returns
+    -------
+    Optional[dict]
+        Student dictionary if found, None otherwise
+        
+    Raises
+    ------
+    DatabaseError
+        If database query fails
+    """
+    # Sanitize student_id for safe database query
+    student_id = sanitize_student_id(student_id)
     
-    conn.close()
-    
-    if row:
-        student = dict(row)
-        if student['face_embedding']:
-            student['face_embedding'] = np.array(json.loads(student['face_embedding']))
-        return student
-    return None
+    conn = None
+    try:
+        conn = get_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute('SELECT * FROM students WHERE student_id = ?', (student_id,))
+        row = cursor.fetchone()
+        
+        if row:
+            student = dict(row)
+            if student['face_embedding']:
+                try:
+                    student['face_embedding'] = np.array(json.loads(student['face_embedding']))
+                except (json.JSONDecodeError, ValueError) as e:
+                    print(f"Warning: Invalid embedding for student {student_id}: {e}")
+                    student['face_embedding'] = None
+            return student
+        return None
+        
+    except sqlite3.Error as e:
+        raise DatabaseError(f"Database error retrieving student {student_id}: {str(e)}")
+    finally:
+        if conn:
+            conn.close()
 
 def update_student(student_id: str, name: str = None, department: str = None, 
                    year: int = None, face_embedding: np.ndarray = None, 
                    face_image_path: str = None) -> bool:
     """Update student information"""
+    # Sanitize student_id
+    student_id = sanitize_student_id(student_id)
+    
     try:
         conn = get_connection()
         cursor = conn.cursor()
@@ -181,6 +321,9 @@ def update_student(student_id: str, name: str = None, department: str = None,
 
 def delete_student(student_id: str) -> bool:
     """Delete student from database"""
+    # Sanitize student_id
+    student_id = sanitize_student_id(student_id)
+    
     try:
         conn = get_connection()
         cursor = conn.cursor()
@@ -194,8 +337,36 @@ def delete_student(student_id: str) -> bool:
         print(f"Error deleting student: {e}")
         return False
 
-def log_visit(student_db_id: int, student_id: str, student_name: str, screenshot_path: str = None, is_known: bool = True) -> int:
-    """Log a canteen visit with screenshot"""
+
+def log_visit(student_db_id: int, student_id: str, student_name: str, 
+              screenshot_path: str = None, is_known: bool = True) -> int:
+    """
+    Log a canteen visit with screenshot.
+    
+    Parameters
+    ----------
+    student_db_id : int
+        Student's database ID
+    student_id : str
+        Student identifier
+    student_name : str
+        Student name
+    screenshot_path : str, optional
+        Path to visit screenshot
+    is_known : bool
+        Whether student is known/registered
+        
+    Returns
+    -------
+    int
+        Log ID if successful, -1 on error
+        
+    Raises
+    ------
+    DatabaseError
+        If database operation fails
+    """
+    conn = None
     try:
         conn = get_connection()
         cursor = conn.cursor()
@@ -205,29 +376,32 @@ def log_visit(student_db_id: int, student_id: str, student_name: str, screenshot
         ''', (student_db_id, student_id, student_name, 1 if is_known else 0, screenshot_path))
         log_id = cursor.lastrowid
         conn.commit()
-        conn.close()
         return log_id
-    except Exception as e:
+        
+    except sqlite3.Error as e:
         print(f"Error logging visit: {e}")
-        return -1
+        raise DatabaseError(f"Failed to log visit: {str(e)}")
+    finally:
+        if conn:
+            conn.close()
+
 
 def update_visit_exit(log_id: int):
     """Update visit log with exit time"""
     try:
         conn = get_connection()
         cursor = conn.cursor()
-        
         cursor.execute('''
             UPDATE visit_logs 
             SET exit_time = CURRENT_TIMESTAMP,
                 duration_minutes = CAST((JULIANDAY(CURRENT_TIMESTAMP) - JULIANDAY(entry_time)) * 24 * 60 AS INTEGER)
             WHERE id = ?
         ''', (log_id,))
-        
         conn.commit()
         conn.close()
     except Exception as e:
         print(f"Error updating visit exit: {e}")
+
 
 def get_visit_logs(date: str = None, student_id: str = None) -> List[dict]:
     """Get visit logs with optional filters"""
@@ -270,19 +444,17 @@ def get_recent_visit(student_id: str) -> Optional[dict]:
     
     return dict(row) if row else None
 
+
 def add_unknown_face(face_image_path: str, face_embedding: np.ndarray) -> int:
     """Add unknown face for later registration"""
     try:
         conn = get_connection()
         cursor = conn.cursor()
-        
         embedding_json = json.dumps(face_embedding.tolist())
-        
         cursor.execute('''
             INSERT INTO unknown_faces (face_image_path, face_embedding)
             VALUES (?, ?)
         ''', (face_image_path, embedding_json))
-        
         face_id = cursor.lastrowid
         conn.commit()
         conn.close()
@@ -290,6 +462,7 @@ def add_unknown_face(face_image_path: str, face_embedding: np.ndarray) -> int:
     except Exception as e:
         print(f"Error adding unknown face: {e}")
         return -1
+
 
 def get_unknown_faces() -> List[dict]:
     """Get all unknown faces"""
@@ -317,19 +490,15 @@ def get_daily_statistics(date: str = None) -> dict:
     conn = get_connection()
     cursor = conn.cursor()
     
-    # Total visits
     cursor.execute('SELECT COUNT(*) FROM visit_logs WHERE date = ?', (date,))
     total_visits = cursor.fetchone()[0]
     
-    # Unique visitors
     cursor.execute('SELECT COUNT(DISTINCT student_id) FROM visit_logs WHERE date = ? AND is_known = 1', (date,))
     unique_visitors = cursor.fetchone()[0]
     
-    # Unknown visitors
     cursor.execute('SELECT COUNT(*) FROM visit_logs WHERE date = ? AND is_known = 0', (date,))
     unknown_visitors = cursor.fetchone()[0]
     
-    # Average duration
     cursor.execute('SELECT AVG(duration_minutes) FROM visit_logs WHERE date = ? AND duration_minutes IS NOT NULL', (date,))
     avg_duration = cursor.fetchone()[0] or 0
     
@@ -343,6 +512,6 @@ def get_daily_statistics(date: str = None) -> dict:
         'average_duration_minutes': round(avg_duration, 2)
     }
 
-# Initialize database when module is imported
+
 if __name__ == "__main__":
     init_database()

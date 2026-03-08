@@ -1,7 +1,4 @@
-"""
-Main Application - College Canteen Face Detection System
-Real-time face detection and recognition for tracking canteen visits
-"""
+"""Main Application - College Canteen Face Detection System"""
 
 import cv2
 import sys
@@ -12,7 +9,6 @@ from threading import Thread
 import time
 import queue
 
-# Add current directory to path
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 import config
@@ -26,15 +22,12 @@ class CanteenFaceDetectionApp:
         print("  Mini Project - B.Tech")
         print("=" * 60)
         
-        # Initialize database
         print("\n[1/3] Initializing database...")
         database.init_database()
         
-        # Initialize face recognition system
         print("[2/3] Loading face recognition system...")
         self.face_system = FaceRecognitionSystem()
         
-        # Initialize camera
         print("[3/3] Setting up camera...")
         self.cap = None
         self.is_running = False
@@ -44,30 +37,33 @@ class CanteenFaceDetectionApp:
         
         print("\nSystem initialized successfully!")
         print("-" * 60)
-    
-    def start_camera(self):
+        def cleanup_camera(self, cap=None):
+        """Properly release camera resources"""
+        if cap is None:
+            cap = self.cap
+        if cap is not None:
+            try:
+                cap.release()
+            except Exception as e:
+                print(f"Error releasing camera: {e}")
+        cv2.destroyAllWindows()
+        def start_camera(self):
         """Start the camera capture (webcam or RTSP stream)"""
         if config.USE_RTSP:
-            # RTSP Stream mode
             print(f"Connecting to RTSP stream: {config.RTSP_URL}")
             
-            # Set RTSP options for lower latency and fewer stale frames
             rtsp_opts = [f"{k};{v}" for k, v in config.RTSP_OPENCV_OPTIONS.items()]
             os.environ["OPENCV_FFMPEG_CAPTURE_OPTIONS"] = "|".join(rtsp_opts)
             
             for attempt in range(config.RTSP_RECONNECT_ATTEMPTS):
                 self.cap = cv2.VideoCapture(config.RTSP_URL, cv2.CAP_FFMPEG)
-                
-                # Set buffer size to reduce latency
                 self.cap.set(cv2.CAP_PROP_BUFFERSIZE, config.RTSP_BUFFER_SIZE)
-                # Set codec for better quality
                 self.cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*'H264'))
-                # Request a realistic FPS to avoid frame queue buildup
+                
                 if config.RTSP_TARGET_FPS:
                     self.cap.set(cv2.CAP_PROP_FPS, config.RTSP_TARGET_FPS)
                 
                 if self.cap.isOpened():
-                    # Test if we can read a frame
                     ret, test_frame = self.cap.read()
                     if ret:
                         print(f"✓ RTSP stream connected successfully!")
@@ -81,22 +77,22 @@ class CanteenFaceDetectionApp:
                 if attempt < config.RTSP_RECONNECT_ATTEMPTS - 1:
                     time.sleep(config.RTSP_RECONNECT_DELAY)
             
+            self.cleanup_camera(self.cap)
             print("\nERROR: Could not connect to RTSP stream!")
             print("Please check:")
             print("  1. RTSP server is running (e.g., OBS with RTSP output)")
             print("  2. RTSP URL is correct")
             print(f"  3. Current URL: {config.RTSP_URL}")
             print("  4. Firewall is not blocking the connection")
-            print("\nTip: To use webcam instead, set USE_RTSP = False in config.py")
             return False
         else:
-            # Webcam mode
             self.cap = cv2.VideoCapture(config.CAMERA_INDEX)
             self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, config.FRAME_WIDTH)
             self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, config.FRAME_HEIGHT)
             self.cap.set(cv2.CAP_PROP_FPS, config.FPS)
             
             if not self.cap.isOpened():
+                self.cleanup_camera(self.cap)
                 print("ERROR: Could not open camera!")
                 print("Please check:")
                 print("  1. Camera is connected")
@@ -118,7 +114,7 @@ class CanteenFaceDetectionApp:
         cv2.destroyAllWindows()
 
     def _start_capture_thread(self):
-        """Continuously read frames into a tiny buffer to avoid overlap/stale frames."""
+        """Continuously read frames into buffer"""
         self._stop_capture_thread()
         self.capture_thread_running = True
 
@@ -136,7 +132,7 @@ class CanteenFaceDetectionApp:
 
                     if self.frame_buffer.full():
                         try:
-                            self.frame_buffer.get_nowait()  # Drop oldest
+                            self.frame_buffer.get_nowait()
                         except queue.Empty:
                             pass
 
@@ -144,7 +140,7 @@ class CanteenFaceDetectionApp:
                         self.frame_buffer.put_nowait(frame)
                     except queue.Full:
                         pass
-                except Exception:
+                except:
                     time.sleep(0.01)
 
         self.capture_thread = Thread(target=capture_loop, daemon=True)
@@ -164,13 +160,12 @@ class CanteenFaceDetectionApp:
                 break
 
     def _get_latest_frame(self):
-        """Fetch the most recent frame, dropping any stale queued frames."""
+        """Fetch the most recent frame"""
         try:
             frame = self.frame_buffer.get(timeout=config.FRAME_FETCH_TIMEOUT)
         except queue.Empty:
             return None
 
-        # Drain to keep only the freshest frame
         while not self.frame_buffer.empty():
             try:
                 frame = self.frame_buffer.get_nowait()
@@ -188,22 +183,15 @@ class CanteenFaceDetectionApp:
         start_time = time.time()
         fps = 0
         last_restart = time.time()
+        failed_reads = 0
+        max_failed_reads = 30
         
         print("\n" + "=" * 60)
         print("DETECTION STARTED")
         print("=" * 60)
         if config.SHOW_WINDOW:
-            print("\nControls:")
-            print("  [Q] - Quit")
-            print("  [R] - Register new student")
-            print("  [S] - Show statistics")
-            print("  [L] - Show today's logs")
-            print("  [SPACE] - Capture screenshot")
+            print("\nControls: [Q] Quit | [R] Register | [S] Stats | [L] Logs | [SPACE] Screenshot")
             print("-" * 60)
-        
-        # Track consecutive failed reads for RTSP reconnection
-        failed_reads = 0
-        max_failed_reads = 30  # Try to reconnect after 30 consecutive failures
         
         while self.is_running:
             if config.USE_RTSP and getattr(config, 'RTSP_RESTART_INTERVAL', 0) > 0:
@@ -222,9 +210,8 @@ class CanteenFaceDetectionApp:
             if frame is None:
                 failed_reads += 1
                 if getattr(config, 'VERBOSE_RTSP_LOGS', False):
-                    print(f"Warning: Could not read frame from camera (attempt {failed_reads})")
+                    print(f"Warning: Could not read frame (attempt {failed_reads})")
                 
-                # If using RTSP and multiple failures, try to reconnect
                 if config.USE_RTSP and failed_reads >= max_failed_reads:
                     print("\nRTSP stream lost. Attempting to reconnect...")
                     self.stop_camera()
@@ -241,10 +228,7 @@ class CanteenFaceDetectionApp:
                 time.sleep(0.1)
                 continue
             
-            # Reset failed reads counter on successful frame
             failed_reads = 0
-            
-            # Process frame
             annotated_frame, recognized_people = self.face_system.process_frame(frame)
 
             if getattr(config, 'LOG_RECOGNITIONS', True) and recognized_people:
@@ -252,7 +236,6 @@ class CanteenFaceDetectionApp:
                 if names:
                     print(f"Detected: {', '.join(names)}")
             
-            # Calculate FPS
             frame_count += 1
             elapsed_time = time.time() - start_time
             if elapsed_time >= 1.0:
@@ -260,154 +243,93 @@ class CanteenFaceDetectionApp:
                 frame_count = 0
                 start_time = time.time()
             
-            # Create display frame based on SHOW_WINDOW setting
-            if config.SHOW_WINDOW:
-                # Show camera feed with annotations
-                display_height = 600  # Maximum height for display
-                h, w = annotated_frame.shape[:2]
-                if h > display_height:
-                    scale = display_height / h
-                    display_width = int(w * scale)
-                    display_frame = cv2.resize(annotated_frame, (display_width, display_height), interpolation=cv2.INTER_LINEAR)
-                else:
-                    display_frame = annotated_frame
-                
-                # Add FPS to frame
-                cv2.putText(
-                    display_frame,
-                    f"FPS: {fps:.1f}",
-                    (display_frame.shape[1] - 120, 30),
-                    cv2.FONT_HERSHEY_SIMPLEX,
-                    0.7,
-                    (0, 255, 0),
-                    2
-                )
-                
-                # Add control hints
-                cv2.putText(
-                    display_frame,
-                    "Press Q:Quit | R:Register | S:Stats | L:Logs",
-                    (10, display_frame.shape[0] - 10),
-                    cv2.FONT_HERSHEY_SIMPLEX,
-                    0.5,
-                    (200, 200, 200),
-                    1
-                )
-                
-                # Display frame
-                cv2.imshow(config.WINDOW_TITLE, display_frame)
-            else:
-                # When SHOW_WINDOW is False, show names only (no camera feed)
-                # Create a dark display with detected names in big text
-                display_width = 800
-                display_height = 600
-                display_frame = np.zeros((display_height, display_width, 3), dtype=np.uint8)
-                display_frame[:] = (30, 30, 30)  # Dark gray background
-                
-                # Get list of detected names
-                detected_names = []
-                for p in recognized_people:
-                    if p.get('is_known') and p.get('name'):
-                        detected_names.append(p['name'])
-                    elif not p.get('is_known'):
-                        detected_names.append('Unknown Person')
-                
-                # Remove duplicates while preserving order
-                unique_names = list(dict.fromkeys(detected_names))
-                
-                # Title
-                cv2.putText(
-                    display_frame,
-                    "People Detected",
-                    (display_width // 2 - 200, 60),
-                    cv2.FONT_HERSHEY_SIMPLEX,
-                    1.5,
-                    (255, 255, 255),
-                    3
-                )
-                
-                # Draw a line under title
-                cv2.line(display_frame, (50, 90), (display_width - 50, 90), (100, 100, 100), 2)
-                
-                # Display names in big text
-                if unique_names:
-                    y_offset = 150
-                    for i, name in enumerate(unique_names):
-                        # Alternate colors for better visibility
-                        color = (100, 255, 100) if 'Unknown' not in name else (100, 150, 255)
-                        
-                        cv2.putText(
-                            display_frame,
-                            f"{i+1}. {name}",
-                            (100, y_offset),
-                            cv2.FONT_HERSHEY_SIMPLEX,
-                            1.2,
-                            color,
-                            2
-                        )
-                        y_offset += 70
-                        
-                        # If too many names, show count
-                        if y_offset > display_height - 120:
-                            remaining = len(unique_names) - i - 1
-                            if remaining > 0:
-                                cv2.putText(
-                                    display_frame,
-                                    f"... and {remaining} more",
-                                    (100, y_offset),
-                                    cv2.FONT_HERSHEY_SIMPLEX,
-                                    1.0,
-                                    (150, 150, 150),
-                                    2
-                                )
-                            break
-                else:
-                    # No people detected
-                    cv2.putText(
-                        display_frame,
-                        "No people detected",
-                        (display_width // 2 - 200, display_height // 2),
-                        cv2.FONT_HERSHEY_SIMPLEX,
-                        1.2,
-                        (150, 150, 150),
-                        2
-                    )
-                
-                # Add FPS and count at bottom
-                cv2.putText(
-                    display_frame,
-                    f"FPS: {fps:.1f} | Total: {len(unique_names)}",
-                    (display_width // 2 - 120, display_height - 30),
-                    cv2.FONT_HERSHEY_SIMPLEX,
-                    0.7,
-                    (200, 200, 200),
-                    2
-                )
-                
-                # Display the names window
-                cv2.imshow(config.WINDOW_TITLE, display_frame)
+            display_frame = self._create_display_frame(annotated_frame, recognized_people, fps)
+            cv2.imshow(config.WINDOW_TITLE, display_frame)
             
-            # Handle key presses (works for both modes)
             key = cv2.waitKey(1) & 0xFF
             
             if key == ord('q') or key == ord('Q'):
                 print("\nQuitting...")
                 self.is_running = False
-            
             elif key == ord('r') or key == ord('R'):
                 self.register_student_interactive(frame)
-            
             elif key == ord('s') or key == ord('S'):
                 self.show_statistics()
-            
             elif key == ord('l') or key == ord('L'):
                 self.show_todays_logs()
-            
-            elif key == ord(' '):  # Spacebar
+            elif key == ord(' '):
                 self.capture_screenshot(annotated_frame)
         
-        self.stop_camera()
+        self.cleanup_camera()
         print("Detection stopped.")
+    
+    def _create_display_frame(self, annotated_frame, recognized_people, fps):
+        """Create display frame based on SHOW_WINDOW setting"""
+        if config.SHOW_WINDOW:
+            display_height = 600
+            h, w = annotated_frame.shape[:2]
+            if h > display_height:
+                scale = display_height / h
+                display_width = int(w * scale)
+                display_frame = cv2.resize(annotated_frame, (display_width, display_height), 
+                                          interpolation=cv2.INTER_LINEAR)
+            else:
+                display_frame = annotated_frame
+            
+            cv2.putText(display_frame, f"FPS: {fps:.1f}",
+                       (display_frame.shape[1] - 120, 30),
+                       cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
+            
+            cv2.putText(display_frame, "Press Q:Quit | R:Register | S:Stats | L:Logs",
+                       (10, display_frame.shape[0] - 10),
+                       cv2.FONT_HERSHEY_SIMPLEX, 0.5, (200, 200, 200), 1)
+            
+            return display_frame
+        else:
+            return self._create_names_only_display(recognized_people, fps)
+    
+    def _create_names_only_display(self, recognized_people, fps):
+        """Create a display showing only detected names"""
+        display_width, display_height = 800, 600
+        display_frame = np.zeros((display_height, display_width, 3), dtype=np.uint8)
+        display_frame[:] = (30, 30, 30)
+        
+        detected_names = [
+            p['name'] if (p.get('is_known') and p.get('name')) else 'Unknown Person'
+            for p in recognized_people
+        ]
+        unique_names = list(dict.fromkeys(detected_names))
+        
+        cv2.putText(display_frame, "People Detected",
+                   (display_width // 2 - 200, 60),
+                   cv2.FONT_HERSHEY_SIMPLEX, 1.5, (255, 255, 255), 3)
+        cv2.line(display_frame, (50, 90), (display_width - 50, 90), (100, 100, 100), 2)
+        
+        if unique_names:
+            y_offset = 150
+            for i, name in enumerate(unique_names):
+                color = (100, 255, 100) if 'Unknown' not in name else (100, 150, 255)
+                cv2.putText(display_frame, f"{i+1}. {name}",
+                           (100, y_offset), cv2.FONT_HERSHEY_SIMPLEX, 1.2, color, 2)
+                y_offset += 70
+                
+                if y_offset > display_height - 120:
+                    remaining = len(unique_names) - i - 1
+                    if remaining > 0:
+                        cv2.putText(display_frame, f"... and {remaining} more",
+                                   (100, y_offset),
+                                   cv2.FONT_HERSHEY_SIMPLEX, 1.0, (150, 150, 150), 2)
+                    break
+        else:
+            cv2.putText(display_frame, "No people detected",
+                       (display_width // 2 - 200, display_height // 2),
+                       cv2.FONT_HERSHEY_SIMPLEX, 1.2, (150, 150, 150), 2)
+        
+        cv2.putText(display_frame, f"FPS: {fps:.1f} | Total: {len(unique_names)}",
+                   (display_width // 2 - 120, display_height - 30),
+                   cv2.FONT_HERSHEY_SIMPLEX, 0.7, (200, 200, 200), 2)
+        
+        return display_frame
     
     def register_student_interactive(self, frame):
         """Interactive student registration"""
@@ -623,6 +545,10 @@ def main():
             break
         except Exception as e:
             print(f"Error: {e}")
+    
+    # Final cleanup
+    if hasattr(app, 'cap') and app.cap:
+        app.cleanup_camera()
 
 if __name__ == "__main__":
     main()

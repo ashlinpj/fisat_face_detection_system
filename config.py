@@ -1,4 +1,4 @@
-# Configuration file for Face Detection System
+"""Configuration file for Face Detection System"""
 
 import os
 
@@ -8,29 +8,33 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 # Database settings
 DATABASE_PATH = os.path.join(BASE_DIR, "database", "canteen.db")
 FACES_DIR = os.path.join(BASE_DIR, "database", "faces")
-# Directory for visit screenshots
 SCREENSHOTS_DIR = os.path.join(BASE_DIR, "screenshots")
 
 # YOLO Model settings
-YOLO_MODEL = "yolov8n.pt"  # General model, works well
+YOLO_MODEL = "yolov8n.pt"
 CONFIDENCE_THRESHOLD = 0.4
 
-# Face Recognition settings - LOWERED for better matching with older photos
-FACE_RECOGNITION_THRESHOLD = 0.35  # Lower = more lenient matching (was 0.6)
-FACE_EMBEDDING_MODEL = "Facenet"  # Facenet is faster and good for variations
+# Face Recognition settings
+FACE_RECOGNITION_THRESHOLD = 0.35
+FACE_EMBEDDING_MODEL = "Facenet"
 
-# Performance settings - GPU OPTIMIZED
-PROCESS_EVERY_N_FRAMES = 5  # Faster processing with GPU
-DETECTION_SCALE = 1.0  # Full resolution with GPU acceleration
-USE_GPU = True  # Enable GPU acceleration
-USE_THREADED_RECOGNITION = True  # Run recognition in background thread
-USE_DNN_DETECTOR = True  # Use GPU-accelerated DNN face detector
-DNN_CONFIDENCE_THRESHOLD = 0.6  # Confidence threshold for DNN detector
+# Performance settings
+PROCESS_EVERY_N_FRAMES = 5
+DETECTION_SCALE = 1.0
+USE_GPU = True
+USE_THREADED_RECOGNITION = True
+USE_DNN_DETECTOR = True
+DNN_CONFIDENCE_THRESHOLD = 0.7  # Increased to reduce false positives
 
-# UI / logging controls
-SHOW_WINDOW = False  # Set False to show names only (no camera feed), True to show full camera feed with annotations
-LOG_RECOGNITIONS = True  # Print detected faces to console
-VERBOSE_RTSP_LOGS = False  # Set True to see dropped-frame warnings
+# Face detection settings
+CASCADE_MIN_NEIGHBORS = 5  # Higher = fewer false positives (4=permissive, 5-6=balanced, 7+=strict)
+MIN_FACE_SIZE = 60  # Minimum face size in pixels (smaller = more sensitive, larger = fewer false positives)
+
+# UI settings
+SHOW_WINDOW = True
+LOG_RECOGNITIONS = True
+VERBOSE_RTSP_LOGS = False
+WINDOW_TITLE = "College Canteen Face Detection System"
 
 # Frame buffer settings to avoid stale/overlapping frames
 FRAME_BUFFER_SIZE = 2  # Keep only the freshest 1-2 frames in memory
@@ -69,8 +73,26 @@ RTSP_OPENCV_OPTIONS = {
 # Number of grab() calls before each read() to skip queued frames when processing lags
 RTSP_PREGRAB_COUNT = 2
 
-# UI settings
-WINDOW_TITLE = "College Canteen Face Detection System"
-
 # Time settings
 MIN_TIME_BETWEEN_LOGS = 30  # Minimum seconds between logging same person
+VISIT_COOLDOWN_SECONDS = 300  # 5 minutes cooldown between logging same person
+
+# Recognition constants
+FACE_CENTER_DISTANCE_MULTIPLIER = 0.5  # Distance threshold for matching faces
+DISPLAY_CONFIDENCE_THRESHOLD = 0.50  # Minimum confidence to display recognition
+CURRENT_FACES_TTL_SECONDS = 10  # Time-to-live for recognized face boxes
+RECOGNITION_QUEUE_SIZE = 1  # Max size of recognition task queue
+
+# Face enhancement settings
+FACE_ENHANCEMENT_TARGET_SIZE = 224  # Target size for face enhancement
+FACE_SHARPNESS_FACTOR = 1.5  # Sharpness enhancement multiplier
+FACE_CONTRAST_FACTOR = 1.2  # Contrast enhancement multiplier
+FACE_BRIGHTNESS_FACTOR = 1.1  # Brightness enhancement multiplier
+
+# Detection thresholds
+MIN_FACE_DETECTION_SIZE = 20  # Minimum face dimension in pixels for detection
+FACE_ASPECT_RATIO_MIN = 0.5  # Minimum width/height ratio for valid face
+FACE_ASPECT_RATIO_MAX = 2.0  # Maximum width/height ratio for valid face
+
+# Frame processing
+PROCESS_INTERVAL_FRAMES = 10  # Process every Nth frame for recognition

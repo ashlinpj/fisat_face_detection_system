@@ -1,18 +1,14 @@
-"""
-Utility functions for the Face Detection System
-"""
+"""Utility functions for the Face Detection System"""
 
 import os
-import cv2
 import numpy as np
-from datetime import datetime, timedelta
-from typing import List, Tuple
+from datetime import datetime
+from typing import List
 import database
 
+
 def generate_report(start_date: str = None, end_date: str = None) -> str:
-    """
-    Generate a detailed report for the specified date range
-    """
+    """Generate a detailed report for the specified date range"""
     if start_date is None:
         start_date = datetime.now().strftime('%Y-%m-%d')
     if end_date is None:
@@ -26,7 +22,6 @@ def generate_report(start_date: str = None, end_date: str = None) -> str:
     report.append(f"Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     report.append("-" * 60)
     
-    # Get statistics
     stats = database.get_daily_statistics(start_date)
     
     report.append("\nDAILY SUMMARY")
@@ -35,13 +30,10 @@ def generate_report(start_date: str = None, end_date: str = None) -> str:
     report.append(f"  Unknown Visitors: {stats['unknown_visitors']}")
     report.append(f"  Average Duration: {stats['average_duration_minutes']} minutes")
     
-    # Get all students
     students = database.get_all_students()
     report.append(f"\nREGISTERED STUDENTS: {len(students)}")
     
-    # Get visit logs
     logs = database.get_visit_logs(date=start_date)
-    
     report.append(f"\nVISIT LOG ({len(logs)} entries)")
     report.append("-" * 60)
     report.append(f"{'Time':<12} {'Student ID':<15} {'Name':<25} {'Status':<10}")
@@ -64,25 +56,20 @@ def generate_report(start_date: str = None, end_date: str = None) -> str:
     
     return "\n".join(report)
 
+
 def export_report_to_file(filepath: str, start_date: str = None, end_date: str = None):
-    """
-    Export report to a text file
-    """
+    """Export report to a text file"""
     report = generate_report(start_date, end_date)
-    
     with open(filepath, 'w') as f:
         f.write(report)
-    
     print(f"Report exported to: {filepath}")
 
+
 def export_logs_to_csv(filepath: str, date: str = None, student_id: str = None):
-    """
-    Export visit logs to CSV file
-    """
+    """Export visit logs to CSV file"""
     logs = database.get_visit_logs(date=date, student_id=student_id)
     
     with open(filepath, 'w', newline='', encoding='utf-8') as f:
-        # Header
         f.write("ID,Date,Entry Time,Exit Time,Student ID,Student Name,Duration (min),Status\n")
         
         for log in logs:
@@ -98,6 +85,8 @@ def export_logs_to_csv(filepath: str, date: str = None, student_id: str = None):
                    f"{duration},"
                    f"{status}\n")
     
+    print(f"Logs exported to: {filepath}")
+
     print(f"Logs exported to: {filepath}")
 
 def export_students_to_csv(filepath: str):

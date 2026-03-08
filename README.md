@@ -191,31 +191,85 @@ system.register_new_student(
 
 ---
 
-## � RTSP Stream Support
+## 📡 RTSP Stream Support
 
-The system now supports RTSP streams from network cameras, OBS, and other RTSP sources!
+The system supports RTSP streams from network cameras, OBS, and other RTSP sources!
 
-### Quick Setup with OBS
+### Quick Setup with OBS (5 Minutes)
 
-1. **Install OBS Studio** and the **RTSP Server Plugin**
-2. **Configure RTSP** in OBS (Tools → RTSP Server Settings)
-3. **Update config.py:**
+1. **Install OBS Studio**
+   - Download from: https://obsproject.com/download
+   - Install and launch OBS
+
+2. **Install RTSP Server Plugin**
+   - Download from: https://github.com/iamscottxu/obs-rtspserver/releases
+   - Download `obs-rtspserver-v3.x.x-windows-installer.exe`
+   - Close OBS if running
+   - Run the installer and restart OBS
+
+3. **Configure OBS**
+   - Add your camera: Sources → + → Video Capture Device
+   - Go to Tools → RTSP Server Settings
+     - ✅ Enable RTSP Server
+     - Port: `8554`
+     - URL Suffix: `/live`
+     - Click OK
+   - Click "Start Streaming"
+
+4. **Update config.py**
    ```python
    USE_RTSP = True
    RTSP_URL = "rtsp://127.0.0.1:8554/live"
    ```
-4. **Run the application** - It will connect to the RTSP stream automatically!
 
-### Test Your RTSP Connection
+5. **Run the application**
+   ```bash
+   python gui_app.py
+   ```
+
+### Test RTSP Connection
 
 ```bash
 python test_rtsp.py
 ```
 
-### Full Setup Guides
+Or test in VLC Player:
+1. Open VLC → Media → Open Network Stream
+2. URL: `rtsp://127.0.0.1:8554/live`
+3. Click Play
 
-- 📖 **Quick Start:** See [RTSP_QUICK_START.md](RTSP_QUICK_START.md) - 5-minute setup
-- 📚 **Complete Guide:** See [RTSP_SETUP_GUIDE.md](RTSP_SETUP_GUIDE.md) - Full documentation
+### Common RTSP URLs
+
+**Local OBS Stream:**
+```
+rtsp://127.0.0.1:8554/live
+```
+
+**IP Camera (with authentication):**
+```
+rtsp://username:password@192.168.1.100:554/stream
+```
+
+**Common IP Camera Formats:**
+- **Hikvision:** `rtsp://admin:password@192.168.1.64:554/Streaming/Channels/101`
+- **Dahua:** `rtsp://admin:password@192.168.1.108:554/cam/realmonitor?channel=1&subtype=0`
+- **Reolink:** `rtsp://admin:password@192.168.1.150:554/h264Preview_01_main`
+
+### RTSP Configuration Options
+
+Edit `config.py` to customize RTSP settings:
+
+```python
+# Switch between webcam and RTSP
+USE_RTSP = False              # False = Webcam, True = RTSP
+
+# RTSP connection settings
+RTSP_URL = "rtsp://127.0.0.1:8554/live"
+RTSP_RECONNECT_ATTEMPTS = 5   # Number of retry attempts
+RTSP_RECONNECT_DELAY = 2      # Seconds between retries
+RTSP_BUFFER_SIZE = 1          # Lower = less latency
+RTSP_TRANSPORT = "tcp"        # "tcp" or "udp"
+```
 
 ### RTSP Features
 
@@ -225,9 +279,44 @@ python test_rtsp.py
 - ✅ Configurable buffer size and reconnection attempts
 - ✅ Easy switching between webcam and RTSP
 
+### RTSP Troubleshooting
+
+**"Could not connect to RTSP stream"**
+- ✅ Is OBS running and streaming?
+- ✅ Is RTSP Server plugin installed?
+- ✅ Check RTSP URL matches exactly
+- ✅ Firewall allows port 8554?
+- ✅ Try testing in VLC Player
+
+**High Latency**
+- Reduce buffer size: `RTSP_BUFFER_SIZE = 1`
+- Use TCP transport: `RTSP_TRANSPORT = "tcp"`
+- Lower resolution in OBS (640x480)
+- Use wired connection instead of WiFi
+
+**Stream Disconnects**
+- Increase reconnect attempts
+- Stabilize network connection
+- Use TCP instead of UDP
+- Check network bandwidth
+
+### Alternative: MediaMTX RTSP Server
+
+For a lightweight RTSP server without OBS:
+
+1. Download MediaMTX: https://github.com/bluenviron/mediamtx/releases
+2. Extract and edit `mediamtx.yml`:
+   ```yaml
+   paths:
+     cam:
+       source: webcam:
+   ```
+3. Run `mediamtx.exe`
+4. Use URL: `rtsp://localhost:8554/cam`
+
 ---
 
-## �📊 Database Schema
+## 📊 Database Schema
 
 ### Students Table
 
@@ -344,7 +433,10 @@ MIN_TIME_BETWEEN_LOGS = 30    # Seconds between same person logs
 
 ## 👥 Contributors
 
-- Add your team members here
+- ASHLIN PJ
+- AV NAVNEETH SAGAR
+- BENSON ELDHO
+- ALEN ALIAS
 
 ---
 
