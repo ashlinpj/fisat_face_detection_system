@@ -26,6 +26,6 @@ echo ============================================================
 echo.
 
 REM Start GUI application
-python gui_app.py
+python gui.py
 
 pause

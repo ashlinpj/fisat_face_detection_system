@@ -1,0 +1,9 @@
+2026-03-10 14:27:28,571 - app.repositories.connection_pool - INFO - init_database:146 - Database initialized successfully
+2026-03-10 14:27:44,897 - app.services.gpu_service - WARNING - check_gpu:67 - No GPU detected - running on CPU mode
+2026-03-10 14:27:45,511 - app.services.detection_service - INFO - _load_dnn_detector:77 - DNN face detector loaded on CPU
+2026-03-10 14:27:45,537 - app.container - INFO - __init__:61 - Loaded 1 known faces
+2026-03-10 14:27:45,592 - app.services.recognition_service - INFO - _start_recognition_thread:85 - Recognition thread started
+2026-03-10 14:27:45,594 - app.container - INFO - __init__:88 - Container initialized (CPU+Threaded Mode)
+2026-03-10 14:29:04,476 - tensorflow - WARNING - _tfmw_add_deprecation_warning:149 - From C:\Users\Basil Alen\AppData\Local\Packages\PythonSoftwareFoundation.Python.3.11_qbz5n2kfra8p0\LocalCache\local-packages\Python311\site-packages\tf_keras\src\losses.py:2976: The name tf.losses.sparse_softmax_cross_entropy is deprecated. Please use tf.compat.v1.losses.sparse_softmax_cross_entropy instead.
+
+2026-03-10 14:29:34,320 - app.services.visit_service - INFO - log_visit:49 - LOGGED: alen at 14:28:36

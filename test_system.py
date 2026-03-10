@@ -11,8 +11,7 @@ import time
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 import config
-import database
-from face_recognition_module import FaceRecognitionSystem
+from app.container import Container
 
 def register_from_image(system, image_path, student_id, name, department="CSE", year=3):
     """Register a student from an image file"""
@@ -27,7 +26,11 @@ def register_from_image(system, image_path, student_id, name, department="CSE", 
         print(f"  ✗ Error: Could not read image")
         return False
     
-    success = system.register_new_student(frame, student_id, name, department, year)
+    success = system.registration_service.register_from_frames(
+                    [frame], student_id, name, department, year
+                )
+    if success:
+        system.reload_known_faces()
     return success
 
 def register_from_webcam(system, student_id, name, department="CSE", year=3):
@@ -70,7 +73,11 @@ def register_from_webcam(system, student_id, name, department="CSE", year=3):
     cv2.destroyAllWindows()
     
     if captured_frame is not None:
-        success = system.register_new_student(captured_frame, student_id, name, department, year)
+        success = system.registration_service.register_from_frames(
+            [captured_frame], student_id, name, department, year
+        )
+        if success:
+            system.reload_known_faces()
         return success
     
     return False
@@ -143,7 +150,7 @@ def test_with_webcam(system):
             break
         
         # Process frame
-        annotated_frame, recognized = system.process_frame(frame)
+        annotated_frame, recognized = system.frame_processor.process_frame(frame)
         
         # Calculate FPS
         fps_count += 1
@@ -176,13 +183,15 @@ def test_with_webcam(system):
             if student_id and name:
                 ret, capture_frame = cap.read()
                 if ret:
-                    if system.register_new_student(capture_frame, student_id, name, "CSE", 3):
+                    if system.registration_service.register_from_frames(
+                            [capture_frame], student_id, name, "CSE", 3):
+                        system.reload_known_faces()
                         print("✓ Registration successful!")
                     else:
                         print("✗ Registration failed!")
         
         elif key == ord('s') or key == ord('S'):
-            students = database.get_all_students()
+            students = system.student_repo.get_all()
             print(f"\n--- Registered Students ({len(students)}) ---")
             for s in students:
                 print(f"  {s['student_id']}: {s['name']}")
@@ -198,8 +207,8 @@ def main():
     
     # Initialize
     print("\nInitializing system...")
-    database.init_database()
-    system = FaceRecognitionSystem()
+    container = Container()
+    system = container
     print("✓ System ready!\n")
     
     while True:
@@ -246,7 +255,7 @@ def main():
             test_with_webcam(system)
         
         elif choice == '5':
-            students = database.get_all_students()
+            students = system.student_repo.get_all()
             print(f"\n--- Registered Students ({len(students)}) ---")
             if students:
                 for s in students:
@@ -256,13 +265,13 @@ def main():
         
         elif choice == '6':
             print("\n--- Re-register (Update Face) ---")
-            students = database.get_all_students()
+            students = _student_repo.get_all()
             print("Current students:")
             for s in students:
                 print(f"  {s['student_id']}: {s['name']}")
             
             student_id = input("\nEnter Student ID to update: ").strip()
-            existing = database.get_student_by_id(student_id)
+            existing = system.student_repo.get_by_id(student_id)
             if existing:
                 print(f"Updating: {existing['name']}")
                 register_from_webcam(system, student_id, existing['name'], 

@@ -39,25 +39,43 @@ A real-time face detection and recognition system designed to track student visi
 
 ```
 fisat_face_detection_system/
+├── gui.py                     # GUI launcher (entry point)
+├── main.py                    # CLI launcher (entry point)
 ├── config.py                  # Configuration settings
-├── database.py                # Database operations
-├── face_recognition_module.py # Face detection & recognition
-├── gui_app.py                 # GUI application (Tkinter)
-├── main.py                    # Command-line application
 ├── requirements.txt           # Python dependencies
-├── setup.py                   # Setup script (optional)
+├── setup.py                   # Setup script
 ├── start.bat                  # Windows batch starter
-├── test_system.py             # System test script
-├── utils.py                   # Utility functions
-├── README.md                  # Project documentation
-├── database/                  # Database folder
-│   ├── canteen.db             # SQLite database file
-│   └── faces/                 # Stored face images (per student)
-├── screenshots/               # Captured screenshots
-├── __pycache__/               # Python bytecode cache
-│   └── ...                    # Compiled .pyc files
-└── venv/                      # (Optional) Virtual environment
-    └── ...
+├── app/                       # Application package
+│   ├── container.py           # Dependency injection container
+│   ├── exceptions.py          # Custom exception hierarchy
+│   ├── models/
+│   │   └── entities.py        # Domain models (Student, Visit, UnknownFace)
+│   ├── repositories/
+│   │   ├── connection_pool.py # SQLite connection pool & DB init
+│   │   ├── student_repository.py
+│   │   ├── visit_repository.py
+│   │   └── unknown_face_repository.py
+│   ├── services/
+│   │   ├── detection_service.py      # Face detection (YOLOv8 / DNN SSD)
+│   │   ├── recognition_service.py    # Face recognition (DeepFace)
+│   │   ├── registration_service.py   # Student registration workflow
+│   │   ├── visit_service.py          # Visit logging with cooldown
+│   │   ├── frame_processor.py        # Detection pipeline orchestrator
+│   │   ├── report_service.py         # Reports & CSV export
+│   │   └── gpu_service.py            # GPU detection & configuration
+│   ├── ui/
+│   │   ├── gui_app.py        # Tkinter GUI (4 tabs)
+│   │   └── cli_app.py        # Interactive CLI
+│   └── utils/
+│       ├── face_matcher.py    # Cosine/Euclidean similarity
+│       ├── image_utils.py     # Face enhancement & screenshots
+│       ├── validators.py      # Input validation & sanitization
+│       └── logging_config.py  # Rotating file handler setup
+├── database/
+│   ├── canteen.db             # SQLite database
+│   └── faces/                 # Stored face images
+├── screenshots/               # Visit screenshots
+└── logs/                      # Application logs
 ```
 
 ---
@@ -107,7 +125,7 @@ python main.py
 ### Option 1: GUI Application (Recommended)
 
 ```bash
-python gui_app.py
+python gui.py
 ```
 
 **Features:**
@@ -148,7 +166,7 @@ python main.py
 
 ### Method 1: During Live Detection
 
-1. Start the detection (`python gui_app.py` or `python main.py`)
+1. Start the detection (`python gui.py` or `python main.py`)
 2. Press `R` or click "Register Face"
 3. Enter student details:
    - Student ID (e.g., 21CS001)
@@ -171,17 +189,17 @@ python main.py
 You can also add faces programmatically:
 
 ```python
-from face_recognition_module import FaceRecognitionSystem
+from app.container import Container
 import cv2
 
-system = FaceRecognitionSystem()
+container = Container()
 
-# Capture frame from camera or load image
+# Load image
 frame = cv2.imread("student_photo.jpg")
 
 # Register student
-system.register_new_student(
-    frame=frame,
+container.registration.register_from_image(
+    image_path="student_photo.jpg",
     student_id="21CS001",
     name="John Doe",
     department="CSE",

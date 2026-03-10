@@ -12,14 +12,13 @@ SCREENSHOTS_DIR = os.path.join(BASE_DIR, "screenshots")
 
 # YOLO Model settings
 YOLO_MODEL = "yolov8n.pt"
-CONFIDENCE_THRESHOLD = 0.4
+CONFIDENCE_THRESHOLD = 0.65
 
 # Face Recognition settings
 FACE_RECOGNITION_THRESHOLD = 0.35
 FACE_EMBEDDING_MODEL = "Facenet"
 
 # Performance settings
-PROCESS_EVERY_N_FRAMES = 5
 DETECTION_SCALE = 1.0
 USE_GPU = True
 USE_THREADED_RECOGNITION = True
@@ -74,7 +73,6 @@ RTSP_OPENCV_OPTIONS = {
 RTSP_PREGRAB_COUNT = 2
 
 # Time settings
-MIN_TIME_BETWEEN_LOGS = 30  # Minimum seconds between logging same person
 VISIT_COOLDOWN_SECONDS = 300  # 5 minutes cooldown between logging same person
 
 # Recognition constants
@@ -96,3 +94,9 @@ FACE_ASPECT_RATIO_MAX = 2.0  # Maximum width/height ratio for valid face
 
 # Frame processing
 PROCESS_INTERVAL_FRAMES = 10  # Process every Nth frame for recognition
+FRAME_CACHE_TTL_SECONDS = 2  # Time-to-live for cached frame detections
+FRAME_CACHE_MAX_SIZE = 10  # Maximum number of cached frames
+
+# Database connection pooling (Phase 3)
+DB_POOL_SIZE = 5  # Number of database connections in the pool
+DB_POOL_TIMEOUT = 10  # Timeout in seconds for getting a connection from pool

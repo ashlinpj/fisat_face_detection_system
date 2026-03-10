@@ -50,8 +50,8 @@ def install_requirements():
     print("\n[3/4] Initializing database...")
     
     try:
-        import database
-        database.init_database()
+        from app.repositories.connection_pool import init_database
+        init_database()
         print("  ✓ Database initialized")
     except Exception as e:
         print(f"  ✗ Database initialization failed: {e}")
@@ -63,7 +63,7 @@ def install_requirements():
     print("  SETUP COMPLETE!")
     print("=" * 60)
     print("\nYou can now run the application:")
-    print("  - GUI Mode:     python gui_app.py")
+    print("  - GUI Mode:     python gui.py")
     print("  - Console Mode: python main.py")
     print("\nFirst run will download YOLO and DeepFace models (~500MB)")
     print("=" * 60)
