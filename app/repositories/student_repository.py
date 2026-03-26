@@ -150,6 +150,9 @@ class StudentRepository:
     def delete(self, student_id: str) -> bool:
         """Delete student from database"""
         student_id = sanitize_student_id(student_id)
+        if not student_id:
+            logger.warning("Delete called with empty/invalid student_id")
+            return False
 
         try:
             with self.pool.get_connection() as conn:

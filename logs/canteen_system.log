@@ -46,3 +46,29 @@
 2026-03-26 18:53:31,043 - app.container - INFO - __init__:88 - Container initialized (CPU+Threaded Mode)
 2026-03-26 18:53:47,208 - tensorflow - WARNING - _tfmw_add_deprecation_warning:149 - From C:\Users\Basil Alen\AppData\Local\Packages\PythonSoftwareFoundation.Python.3.11_qbz5n2kfra8p0\LocalCache\local-packages\Python311\site-packages\tf_keras\src\losses.py:2976: The name tf.losses.sparse_softmax_cross_entropy is deprecated. Please use tf.compat.v1.losses.sparse_softmax_cross_entropy instead.
 
+2026-03-26 19:04:53,322 - app.repositories.connection_pool - INFO - init_database:146 - Database initialized successfully
+2026-03-26 19:05:08,366 - app.services.gpu_service - WARNING - check_gpu:67 - No GPU detected - running on CPU mode
+2026-03-26 19:05:08,635 - app.services.detection_service - INFO - _load_dnn_detector:77 - DNN face detector loaded on CPU
+2026-03-26 19:05:08,637 - app.container - INFO - __init__:61 - Loaded 1 known faces
+2026-03-26 19:05:08,641 - app.services.recognition_service - INFO - _start_recognition_thread:85 - Recognition thread started
+2026-03-26 19:05:08,642 - app.container - INFO - __init__:88 - Container initialized (CPU+Threaded Mode)
+2026-03-26 19:05:45,640 - tensorflow - WARNING - _tfmw_add_deprecation_warning:149 - From C:\Users\Basil Alen\Desktop\fisat_face_detection_system\venv\Lib\site-packages\tf_keras\src\losses.py:2976: The name tf.losses.sparse_softmax_cross_entropy is deprecated. Please use tf.compat.v1.losses.sparse_softmax_cross_entropy instead.
+
+2026-03-26 19:06:03,806 - app.services.visit_service - INFO - log_visit:49 - LOGGED: alen at 19:05:28
+2026-03-26 19:08:18,938 - app.repositories.student_repository - INFO - add:50 - Student alenalias (25) added successfully
+2026-03-26 19:08:18,942 - app.services.registration_service - INFO - register_from_frames:163 - Added: alenalias with 12 samples
+2026-03-26 19:08:18,945 - app.container - INFO - reload_known_faces:94 - Loaded 2 known faces
+2026-03-26 19:08:21,244 - app.services.visit_service - INFO - log_visit:49 - LOGGED: alenalias at 19:08:19
+2026-03-26 19:13:47,461 - app.repositories.connection_pool - INFO - init_database:146 - Database initialized successfully
+2026-03-26 19:13:52,783 - app.services.gpu_service - WARNING - check_gpu:67 - No GPU detected - running on CPU mode
+2026-03-26 19:13:52,897 - app.services.detection_service - INFO - _load_dnn_detector:77 - DNN face detector loaded on CPU
+2026-03-26 19:13:52,899 - app.container - INFO - __init__:61 - Loaded 1 known faces
+2026-03-26 19:13:52,901 - app.services.recognition_service - INFO - _start_recognition_thread:85 - Recognition thread started
+2026-03-26 19:13:52,902 - app.container - INFO - __init__:88 - Container initialized (CPU+Threaded Mode)
+2026-03-26 19:14:03,018 - app.container - INFO - reload_known_faces:94 - Loaded 0 known faces
+2026-03-26 19:14:18,766 - tensorflow - WARNING - _tfmw_add_deprecation_warning:149 - From C:\Users\Basil Alen\Desktop\fisat_face_detection_system\venv\Lib\site-packages\tf_keras\src\losses.py:2976: The name tf.losses.sparse_softmax_cross_entropy is deprecated. Please use tf.compat.v1.losses.sparse_softmax_cross_entropy instead.
+
+2026-03-26 19:16:14,723 - app.repositories.student_repository - INFO - add:50 - Student alen (25) added successfully
+2026-03-26 19:16:14,724 - app.services.registration_service - INFO - register_from_frames:163 - Added: alen with 10 samples
+2026-03-26 19:16:14,726 - app.container - INFO - reload_known_faces:94 - Loaded 1 known faces
+2026-03-26 19:16:16,850 - app.services.visit_service - INFO - log_visit:49 - LOGGED: alen at 19:16:15

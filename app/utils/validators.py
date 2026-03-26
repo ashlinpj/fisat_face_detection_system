@@ -93,9 +93,14 @@ def sanitize_filename(filename: str) -> str:
     return filename
 
 
-def sanitize_student_id(student_id: str) -> str:
+def sanitize_student_id(student_id) -> str:
     """Sanitize student ID to prevent path traversal and invalid filenames."""
-    sanitized = re.sub(r'[^a-zA-Z0-9_-]', '_', student_id)
+    if student_id is None:
+        return ""
+
+    # Some call sites may pass numeric IDs (e.g., from tree/table widgets).
+    # Coerce to string before regex sanitation to avoid TypeError.
+    sanitized = re.sub(r'[^a-zA-Z0-9_-]', '_', str(student_id))
     return sanitized[:20]
 
 
