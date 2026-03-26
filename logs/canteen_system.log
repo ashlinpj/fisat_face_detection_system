@@ -32,3 +32,17 @@
 2026-03-10 14:50:26,444 - app.container - INFO - __init__:88 - Container initialized (CPU+Threaded Mode)
 2026-03-10 14:50:36,078 - tensorflow - WARNING - _tfmw_add_deprecation_warning:149 - From C:\Users\Basil Alen\AppData\Local\Packages\PythonSoftwareFoundation.Python.3.11_qbz5n2kfra8p0\LocalCache\local-packages\Python311\site-packages\tf_keras\src\losses.py:2976: The name tf.losses.sparse_softmax_cross_entropy is deprecated. Please use tf.compat.v1.losses.sparse_softmax_cross_entropy instead.
 
+2026-03-26 18:43:09,343 - app.repositories.connection_pool - INFO - init_database:146 - Database initialized successfully
+2026-03-26 18:43:28,715 - app.services.gpu_service - WARNING - check_gpu:67 - No GPU detected - running on CPU mode
+2026-03-26 18:43:29,019 - app.services.detection_service - INFO - _load_dnn_detector:77 - DNN face detector loaded on CPU
+2026-03-26 18:43:29,021 - app.container - INFO - __init__:61 - Loaded 1 known faces
+2026-03-26 18:43:29,029 - app.services.recognition_service - INFO - _start_recognition_thread:85 - Recognition thread started
+2026-03-26 18:43:29,031 - app.container - INFO - __init__:88 - Container initialized (CPU+Threaded Mode)
+2026-03-26 18:53:15,493 - app.repositories.connection_pool - INFO - init_database:146 - Database initialized successfully
+2026-03-26 18:53:30,860 - app.services.gpu_service - WARNING - check_gpu:67 - No GPU detected - running on CPU mode
+2026-03-26 18:53:31,038 - app.services.detection_service - INFO - _load_dnn_detector:77 - DNN face detector loaded on CPU
+2026-03-26 18:53:31,039 - app.container - INFO - __init__:61 - Loaded 1 known faces
+2026-03-26 18:53:31,042 - app.services.recognition_service - INFO - _start_recognition_thread:85 - Recognition thread started
+2026-03-26 18:53:31,043 - app.container - INFO - __init__:88 - Container initialized (CPU+Threaded Mode)
+2026-03-26 18:53:47,208 - tensorflow - WARNING - _tfmw_add_deprecation_warning:149 - From C:\Users\Basil Alen\AppData\Local\Packages\PythonSoftwareFoundation.Python.3.11_qbz5n2kfra8p0\LocalCache\local-packages\Python311\site-packages\tf_keras\src\losses.py:2976: The name tf.losses.sparse_softmax_cross_entropy is deprecated. Please use tf.compat.v1.losses.sparse_softmax_cross_entropy instead.
+
