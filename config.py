@@ -15,7 +15,7 @@ YOLO_MODEL = "yolov8n.pt"
 CONFIDENCE_THRESHOLD = 0.65
 
 # Face Recognition settings
-FACE_RECOGNITION_THRESHOLD = 0.35
+FACE_RECOGNITION_THRESHOLD = 0.50
 FACE_EMBEDDING_MODEL = "Facenet"
 
 # Performance settings
@@ -23,7 +23,7 @@ DETECTION_SCALE = 1.0
 USE_GPU = True
 USE_THREADED_RECOGNITION = True
 USE_DNN_DETECTOR = True
-DNN_CONFIDENCE_THRESHOLD = 0.7  # Increased to reduce false positives
+DNN_CONFIDENCE_THRESHOLD = 0.75  # Increased to reduce false positives
 
 # Face detection settings
 CASCADE_MIN_NEIGHBORS = 5  # Higher = fewer false positives (4=permissive, 5-6=balanced, 7+=strict)
@@ -77,7 +77,7 @@ VISIT_COOLDOWN_SECONDS = 300  # 5 minutes cooldown between logging same person
 
 # Recognition constants
 FACE_CENTER_DISTANCE_MULTIPLIER = 0.5  # Distance threshold for matching faces
-DISPLAY_CONFIDENCE_THRESHOLD = 0.50  # Minimum confidence to display recognition
+DISPLAY_CONFIDENCE_THRESHOLD = 0.65  # Minimum confidence to display recognition
 CURRENT_FACES_TTL_SECONDS = 10  # Time-to-live for recognized face boxes
 RECOGNITION_QUEUE_SIZE = 1  # Max size of recognition task queue
 

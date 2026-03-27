@@ -72,3 +72,51 @@
 2026-03-26 19:16:14,724 - app.services.registration_service - INFO - register_from_frames:163 - Added: alen with 10 samples
 2026-03-26 19:16:14,726 - app.container - INFO - reload_known_faces:94 - Loaded 1 known faces
 2026-03-26 19:16:16,850 - app.services.visit_service - INFO - log_visit:49 - LOGGED: alen at 19:16:15
+2026-03-26 22:39:35,508 - app.repositories.connection_pool - INFO - init_database:146 - Database initialized successfully
+2026-03-26 22:39:49,946 - app.services.gpu_service - WARNING - check_gpu:67 - No GPU detected - running on CPU mode
+2026-03-26 22:39:50,115 - app.services.detection_service - INFO - _load_dnn_detector:77 - DNN face detector loaded on CPU
+2026-03-26 22:39:50,117 - app.container - INFO - __init__:61 - Loaded 1 known faces
+2026-03-26 22:39:50,118 - app.services.recognition_service - INFO - _start_recognition_thread:85 - Recognition thread started
+2026-03-26 22:39:50,119 - app.container - INFO - __init__:88 - Container initialized (CPU+Threaded Mode)
+2026-03-26 22:40:44,743 - tensorflow - WARNING - _tfmw_add_deprecation_warning:149 - From C:\Users\Basil Alen\AppData\Local\Packages\PythonSoftwareFoundation.Python.3.11_qbz5n2kfra8p0\LocalCache\local-packages\Python311\site-packages\tf_keras\src\losses.py:2976: The name tf.losses.sparse_softmax_cross_entropy is deprecated. Please use tf.compat.v1.losses.sparse_softmax_cross_entropy instead.
+
+2026-03-26 22:44:32,202 - app.repositories.connection_pool - INFO - init_database:146 - Database initialized successfully
+2026-03-26 22:44:36,121 - app.services.gpu_service - WARNING - check_gpu:67 - No GPU detected - running on CPU mode
+2026-03-26 22:44:36,198 - app.services.detection_service - INFO - _load_dnn_detector:77 - DNN face detector loaded on CPU
+2026-03-26 22:44:36,199 - app.container - INFO - __init__:61 - Loaded 1 known faces
+2026-03-26 22:44:36,201 - app.services.recognition_service - INFO - _start_recognition_thread:85 - Recognition thread started
+2026-03-26 22:44:36,201 - app.container - INFO - __init__:88 - Container initialized (CPU+Threaded Mode)
+2026-03-26 22:45:02,718 - tensorflow - WARNING - _tfmw_add_deprecation_warning:149 - From C:\Users\Basil Alen\AppData\Local\Packages\PythonSoftwareFoundation.Python.3.11_qbz5n2kfra8p0\LocalCache\local-packages\Python311\site-packages\tf_keras\src\losses.py:2976: The name tf.losses.sparse_softmax_cross_entropy is deprecated. Please use tf.compat.v1.losses.sparse_softmax_cross_entropy instead.
+
+2026-03-26 22:45:26,501 - app.services.registration_service - WARNING - register_from_frames:139 - No valid samples captured for 1. Registration aborted.
+2026-03-26 22:45:26,573 - app.services.visit_service - INFO - log_visit:49 - LOGGED: alen at 22:45:00
+2026-03-26 22:46:18,528 - app.repositories.student_repository - INFO - add:50 - Student a (2) added successfully
+2026-03-26 22:46:18,529 - app.services.registration_service - INFO - register_from_frames:163 - Added: a with 1 samples
+2026-03-26 22:46:18,531 - app.container - INFO - reload_known_faces:94 - Loaded 2 known faces
+2026-03-26 22:46:21,371 - app.services.visit_service - INFO - log_visit:49 - LOGGED: a at 22:46:19
+2026-03-26 22:51:39,025 - app.repositories.connection_pool - INFO - init_database:146 - Database initialized successfully
+2026-03-26 22:51:42,832 - app.services.gpu_service - WARNING - check_gpu:67 - No GPU detected - running on CPU mode
+2026-03-26 22:51:42,904 - app.services.detection_service - INFO - _load_dnn_detector:77 - DNN face detector loaded on CPU
+2026-03-26 22:51:42,905 - app.container - INFO - __init__:61 - Loaded 2 known faces
+2026-03-26 22:51:42,908 - app.services.recognition_service - INFO - _start_recognition_thread:85 - Recognition thread started
+2026-03-26 22:51:42,909 - app.container - INFO - __init__:88 - Container initialized (CPU+Threaded Mode)
+2026-03-26 22:52:03,024 - tensorflow - WARNING - _tfmw_add_deprecation_warning:149 - From C:\Users\Basil Alen\AppData\Local\Packages\PythonSoftwareFoundation.Python.3.11_qbz5n2kfra8p0\LocalCache\local-packages\Python311\site-packages\tf_keras\src\losses.py:2976: The name tf.losses.sparse_softmax_cross_entropy is deprecated. Please use tf.compat.v1.losses.sparse_softmax_cross_entropy instead.
+
+2026-03-26 22:52:09,690 - app.services.visit_service - INFO - log_visit:49 - LOGGED: a at 22:51:56
+2026-03-26 22:52:21,755 - app.services.visit_service - INFO - log_visit:49 - LOGGED: alen at 22:52:20
+2026-03-26 22:52:33,818 - app.container - INFO - reload_known_faces:94 - Loaded 1 known faces
+2026-03-26 22:56:30,013 - app.repositories.connection_pool - INFO - init_database:146 - Database initialized successfully
+2026-03-26 22:56:34,363 - app.services.gpu_service - WARNING - check_gpu:67 - No GPU detected - running on CPU mode
+2026-03-26 22:56:34,472 - app.services.detection_service - INFO - _load_dnn_detector:77 - DNN face detector loaded on CPU
+2026-03-26 22:56:34,474 - app.container - INFO - __init__:61 - Loaded 1 known faces
+2026-03-26 22:56:34,476 - app.services.recognition_service - INFO - _start_recognition_thread:85 - Recognition thread started
+2026-03-26 22:56:34,477 - app.container - INFO - __init__:88 - Container initialized (CPU+Threaded Mode)
+2026-03-26 22:56:43,818 - tensorflow - WARNING - _tfmw_add_deprecation_warning:149 - From C:\Users\Basil Alen\AppData\Local\Packages\PythonSoftwareFoundation.Python.3.11_qbz5n2kfra8p0\LocalCache\local-packages\Python311\site-packages\tf_keras\src\losses.py:2976: The name tf.losses.sparse_softmax_cross_entropy is deprecated. Please use tf.compat.v1.losses.sparse_softmax_cross_entropy instead.
+
+2026-03-26 22:56:50,515 - app.services.visit_service - INFO - log_visit:49 - LOGGED: alen at 22:56:37
+2026-03-26 22:59:53,962 - app.repositories.connection_pool - INFO - init_database:146 - Database initialized successfully
+2026-03-26 23:00:00,767 - app.services.gpu_service - WARNING - check_gpu:67 - No GPU detected - running on CPU mode
+2026-03-26 23:00:00,882 - app.services.detection_service - INFO - _load_dnn_detector:77 - DNN face detector loaded on CPU
+2026-03-26 23:00:00,885 - app.container - INFO - __init__:61 - Loaded 1 known faces
+2026-03-26 23:00:00,887 - app.services.recognition_service - INFO - _start_recognition_thread:85 - Recognition thread started
+2026-03-26 23:00:00,888 - app.container - INFO - __init__:88 - Container initialized (CPU+Threaded Mode)

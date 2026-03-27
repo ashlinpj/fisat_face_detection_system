@@ -1,0 +1,710 @@
+================================================================================
+FISAT FACE DETECTION SYSTEM - COMPLETE PROJECT DOCUMENTATION
+================================================================================
+
+Document Type : Technical and Operational Documentation
+Project Type  : Real-time Face Detection and Recognition System
+Primary Use   : College canteen visit verification and logging
+Platform      : Python application (GUI + CLI)
+Database      : SQLite
+Updated On    : 2026-03-26
+
+
+================================================================================
+1. PROJECT PURPOSE AND SCOPE
+================================================================================
+
+1.1 Purpose
+-----------
+This project implements a complete face-based visit logging system designed for
+college canteen monitoring. It identifies registered students in real time,
+records visit events, and provides operational interfaces for admins.
+
+1.2 Core Problems Solved
+------------------------
+- Verifies whether a student actually visited the canteen.
+- Maintains timestamped evidence of visits.
+- Reduces false complaint disputes using objective logs.
+- Supports both local webcam and RTSP network stream input.
+
+1.3 Main Capabilities
+---------------------
+- Real-time face detection.
+- Face recognition against registered students.
+- Student registration from live camera frames and image files.
+- Visit log storage and filtering.
+- Statistics dashboard and CSV export.
+- CPU/GPU-aware runtime behavior.
+
+
+================================================================================
+2. TECHNOLOGY STACK
+================================================================================
+
+2.1 Languages and Frameworks
+----------------------------
+- Python 3.10+
+- Tkinter (GUI)
+- OpenCV (capture and image processing)
+- DeepFace (embedding extraction)
+- TensorFlow (DeepFace backend)
+- Ultralytics YOLOv8 (optional detector path)
+
+2.2 Data Layer
+--------------
+- SQLite database stored in database/canteen.db
+- Connection pooling with a singleton queue-based pool
+- WAL mode enabled for better concurrent behavior
+
+2.3 Main Python Dependencies (requirements.txt)
+-----------------------------------------------
+- opencv-python>=4.8.0
+- numpy>=1.24.0
+- Pillow>=10.0.0
+- ultralytics>=8.1.0
+- deepface>=0.0.79
+- tensorflow>=2.13.0
+
+
+================================================================================
+3. PROJECT STRUCTURE
+================================================================================
+
+Root:
+- config.py                     : Runtime settings and thresholds.
+- config.txt                    : Detailed tuning guide and presets.
+- main.py                       : CLI launcher entry point.
+- gui.py                        : GUI launcher entry point.
+- setup.py                      : Setup helper (dependency install + init DB).
+- start.bat                     : Windows quick-start script.
+- rtsp_config.bat               : RTSP mode helper script.
+- deploy.prototxt               : DNN face detector config.
+- res10_300x300_ssd_iter_140000.caffemodel : DNN detector model.
+- README.md                     : User-facing project readme.
+- requirements.txt              : Python package list.
+- PROJECT_DOCUMENTATION.txt     : This document.
+- tests/                        : Test and diagnostic scripts.
+
+app/ package:
+- container.py                  : Dependency Injection (DI) wiring.
+- exceptions.py                 : Domain exceptions.
+- models/entities.py            : Dataclasses and dict-compatible entities.
+
+app/repositories/
+- connection_pool.py            : SQLite pool and schema initialization.
+- student_repository.py         : CRUD for students.
+- visit_repository.py           : CRUD for visit logs and stats.
+- unknown_face_repository.py    : Unknown face storage.
+
+app/services/
+- gpu_service.py                : GPU discovery and TF memory growth setup.
+- detection_service.py          : DNN/Cascade face detection orchestration.
+- recognition_service.py        : DeepFace embedding + threaded matching.
+- registration_service.py       : Registration workflows and face sampling.
+- visit_service.py              : Cooldown logic + screenshot persistence.
+- frame_processor.py            : End-to-end frame pipeline and annotation.
+- report_service.py             : Report generation + CSV exports.
+
+app/ui/
+- cli_app.py                    : Interactive console UI.
+- gui_app.py                    : Tkinter tabbed admin interface.
+
+app/utils/
+- face_matcher.py               : Cosine/euclidean matching logic.
+- image_utils.py                : Face enhancement and display helpers.
+- validators.py                 : Validation and sanitization helpers.
+- logging_config.py             : Console + rotating file logging setup.
+
+Data and outputs:
+- database/                     : SQLite DB and stored face images.
+- screenshots/                  : Visit and manual screenshots.
+- logs/                         : Runtime logs.
+
+
+================================================================================
+4. RUNTIME ENTRY POINTS
+================================================================================
+
+4.1 CLI Mode
+------------
+Command:
+python main.py
+
+Behavior:
+- Initializes logging.
+- Builds DI container.
+- Starts menu-driven interface.
+- Uses CanteenFaceDetectionApp for camera loop and admin commands.
+
+4.2 GUI Mode
+------------
+Command:
+python gui.py
+
+Behavior:
+- Initializes logging.
+- Builds DI container.
+- Launches Tkinter app with 4 tabs:
+  1) Live Detection
+  2) Students
+  3) Visit Logs
+  4) Statistics
+
+4.3 Setup Mode
+--------------
+Command:
+python setup.py
+
+Behavior:
+- Installs required packages.
+- Creates required directories.
+- Initializes database schema.
+
+
+================================================================================
+5. DEPENDENCY INJECTION AND INITIALIZATION ORDER
+================================================================================
+
+5.1 Container Responsibilities (app/container.py)
+-------------------------------------------------
+Container is the central composition root. It wires all dependencies once and
+passes references to UI/application layers.
+
+5.2 Initialization Sequence
+---------------------------
+1. Create ConnectionPool and initialize DB schema.
+2. Create repositories (student, visit, unknown face).
+3. Detect GPU availability.
+4. Create DetectionService.
+5. Load known faces from StudentRepository.
+6. Create RecognitionService (threaded by config).
+7. Create RegistrationService.
+8. Create VisitService.
+9. Create FrameProcessor.
+10. Create ReportService.
+
+5.3 Container Utility Methods
+-----------------------------
+- reload_known_faces(): Refreshes in-memory embeddings after registration changes.
+- stop(): Stops recognition background thread.
+
+
+================================================================================
+6. CAMERA AND STREAM ACQUISITION MODEL
+================================================================================
+
+6.1 Webcam Mode
+---------------
+- Uses config.CAMERA_INDEX.
+- Applies configured frame size and FPS.
+
+6.2 RTSP Mode
+-------------
+- Uses config.RTSP_URL with OpenCV FFMPEG capture.
+- Applies RTSP buffer and transport options.
+- Supports reconnect attempts and delay.
+
+6.3 Low-latency Capture Strategy in CLI
+---------------------------------------
+- Dedicated capture thread reads frames continuously.
+- Frame queue has bounded size (config.FRAME_BUFFER_SIZE).
+- Old frames are dropped to keep only freshest data.
+- Optional pre-grab calls skip stale packets on RTSP streams.
+
+6.4 Recovery Behavior
+---------------------
+- CLI and GUI both attempt RTSP reconnection on repeated read failures.
+- CLI supports optional periodic RTSP restart interval to clear artifacts.
+
+
+================================================================================
+7. DETECTION, RECOGNITION, LOGGING PIPELINE
+================================================================================
+
+7.1 High-level Pipeline
+-----------------------
+For each frame:
+1. Detect faces (DNN primary, Cascade fallback).
+2. Cache detections by frame hash for short TTL reuse.
+3. Every Nth frame, crop+enhance face and queue recognition task.
+4. Background recognition thread computes embedding and best match.
+5. Main processor consumes latest result and overlays labels.
+6. VisitService logs known matches with cooldown protection.
+
+7.2 Detection Layer (app/services/detection_service.py)
+-------------------------------------------------------
+- Tries OpenCV DNN SSD detector first when USE_DNN_DETECTOR is enabled.
+- Filters detections by confidence, minimum size, and aspect ratio.
+- Converts detections to square boxes for consistent downstream crops.
+- Falls back to Haar Cascade when DNN is unavailable or no result.
+
+7.3 Recognition Layer (app/services/recognition_service.py)
+-----------------------------------------------------------
+- Uses DeepFace.represent() with enforce_detection=False and detector_backend=skip.
+- Uses configurable embedding model from config.FACE_EMBEDDING_MODEL.
+- Threaded mode:
+  - recognition_queue receives latest face sample task.
+  - result_queue stores latest recognition result.
+  - queue sizes are 1 to avoid backlog and stale latency.
+
+7.4 Matching Logic (app/utils/face_matcher.py)
+----------------------------------------------
+- Uses cosine similarity (vectorized for performance).
+- Chooses top similarity candidate.
+- Requires:
+  - score >= threshold
+  - margin above second-best candidate > margin parameter
+- This improves resistance to close false matches.
+
+7.5 Frame Processor (app/services/frame_processor.py)
+-----------------------------------------------------
+- Maintains current recognized face overlays with TTL.
+- Associates detection and recognition by center-distance heuristic.
+- Draws labels and confidence on frame.
+- Maintains simple frame-level detection cache with TTL and max size.
+
+7.6 Visit Logging (app/services/visit_service.py)
+-------------------------------------------------
+- Enforces VISIT_COOLDOWN_SECONDS per student.
+- Saves screenshot for each logged visit.
+- Writes visit row with known status metadata.
+
+
+================================================================================
+8. REGISTRATION WORKFLOWS
+================================================================================
+
+8.1 Register from Image File
+----------------------------
+- Load image from path.
+- Detect face(s) using detection service.
+- If none found, attempts DeepFace face extraction fallback.
+- Uses largest face candidate if multiple faces exist.
+- Crops with padding, enhances image, computes embedding.
+- Saves enhanced face image to database/faces.
+- Adds or updates student entry.
+
+8.2 Register from Multiple Frames
+---------------------------------
+- Captures multiple samples from guided poses.
+- Extracts embedding from each valid sample.
+- Averages embeddings and normalizes final vector.
+- Saves sample images into per-student folder.
+- Adds or updates student row and primary image path.
+
+8.3 GUI Guided Pose Capture
+---------------------------
+- GUI registration dialog captures an ordered pose script.
+- Includes optional glasses captures.
+- Requires minimum usable sample count before registration proceeds.
+
+
+================================================================================
+9. DATABASE DESIGN
+================================================================================
+
+9.1 students Table
+------------------
+Columns:
+- id INTEGER PRIMARY KEY AUTOINCREMENT
+- student_id TEXT UNIQUE NOT NULL
+- name TEXT NOT NULL
+- department TEXT
+- year INTEGER
+- face_embedding TEXT (JSON-serialized vector)
+- face_image_path TEXT
+- created_at TIMESTAMP
+- updated_at TIMESTAMP
+
+9.2 visit_logs Table
+--------------------
+Columns:
+- id INTEGER PRIMARY KEY AUTOINCREMENT
+- student_db_id INTEGER (FK to students.id)
+- student_id TEXT
+- student_name TEXT
+- entry_time TIMESTAMP
+- exit_time TIMESTAMP
+- duration_minutes INTEGER
+- date DATE
+- is_known INTEGER (1 known, 0 unknown)
+- screenshot_path TEXT
+
+9.3 unknown_faces Table
+-----------------------
+Columns:
+- id INTEGER PRIMARY KEY AUTOINCREMENT
+- face_image_path TEXT
+- face_embedding TEXT
+- first_seen TIMESTAMP
+- last_seen TIMESTAMP
+- times_seen INTEGER
+
+9.4 Connection Pooling
+----------------------
+- Singleton connection pool.
+- Default pool size from config.DB_POOL_SIZE.
+- Uses sqlite3.Row for dict-like rows.
+- WAL mode enabled for concurrent read/write friendliness.
+
+
+================================================================================
+10. USER INTERFACES
+================================================================================
+
+10.1 GUI Interface (app/ui/gui_app.py)
+--------------------------------------
+Tab 1: Live Detection
+- Start/stop detection.
+- Register face from live camera.
+- Capture screenshot.
+- Shows counts: detected, known, unknown, FPS.
+- Shows recent detections list.
+
+Tab 2: Students
+- Refresh student list.
+- Search/filter students.
+- Register from image file.
+- Delete selected student.
+
+Tab 3: Visit Logs
+- Filter by date and student ID.
+- Export filtered logs to CSV.
+
+Tab 4: Statistics
+- Card summary of totals.
+- Detailed text report block.
+
+10.2 CLI Interface (app/ui/cli_app.py)
+--------------------------------------
+Main commands:
+- Start detection loop.
+- Register new student.
+- Show statistics.
+- Show daily logs.
+- List all students.
+
+Detection hotkeys in CLI window:
+- Q: Quit detection loop
+- R: Register
+- S: Statistics
+- L: Logs
+- Space: Screenshot
+
+
+================================================================================
+11. CONFIGURATION REFERENCE (config.py)
+================================================================================
+
+11.1 Paths and base settings
+----------------------------
+- BASE_DIR
+- DATABASE_PATH
+- FACES_DIR
+- SCREENSHOTS_DIR
+
+11.2 Detection and recognition
+------------------------------
+- YOLO_MODEL
+- CONFIDENCE_THRESHOLD
+- FACE_RECOGNITION_THRESHOLD
+- FACE_EMBEDDING_MODEL
+- USE_DNN_DETECTOR
+- DNN_CONFIDENCE_THRESHOLD
+- CASCADE_MIN_NEIGHBORS
+- MIN_FACE_SIZE
+- MIN_FACE_DETECTION_SIZE
+- FACE_ASPECT_RATIO_MIN
+- FACE_ASPECT_RATIO_MAX
+
+11.3 Performance and threading
+------------------------------
+- DETECTION_SCALE
+- USE_GPU
+- USE_THREADED_RECOGNITION
+- PROCESS_INTERVAL_FRAMES
+- FRAME_CACHE_TTL_SECONDS
+- FRAME_CACHE_MAX_SIZE
+- FRAME_BUFFER_SIZE
+- FRAME_FETCH_TIMEOUT
+- RECOGNITION_QUEUE_SIZE
+
+11.4 Camera and stream
+----------------------
+- CAMERA_INDEX
+- FRAME_WIDTH
+- FRAME_HEIGHT
+- FPS
+- USE_RTSP
+- RTSP_URL
+- RTSP_RECONNECT_ATTEMPTS
+- RTSP_RECONNECT_DELAY
+- RTSP_BUFFER_SIZE
+- RTSP_TRANSPORT
+- RTSP_TARGET_FPS
+- RTSP_RESTART_INTERVAL
+- RTSP_OPENCV_OPTIONS
+- RTSP_PREGRAB_COUNT
+
+11.5 UX and logging behavior
+----------------------------
+- SHOW_WINDOW
+- LOG_RECOGNITIONS
+- VERBOSE_RTSP_LOGS
+- WINDOW_TITLE
+
+11.6 Visit and overlay behavior
+-------------------------------
+- VISIT_COOLDOWN_SECONDS
+- FACE_CENTER_DISTANCE_MULTIPLIER
+- DISPLAY_CONFIDENCE_THRESHOLD
+- CURRENT_FACES_TTL_SECONDS
+
+11.7 Face enhancement behavior
+------------------------------
+- FACE_ENHANCEMENT_TARGET_SIZE
+- FACE_SHARPNESS_FACTOR
+- FACE_CONTRAST_FACTOR
+- FACE_BRIGHTNESS_FACTOR
+
+11.8 DB pool tuning
+-------------------
+- DB_POOL_SIZE
+- DB_POOL_TIMEOUT
+
+Note:
+For detailed practical tuning guidance and presets, refer to config.txt.
+
+
+================================================================================
+12. LOGGING AND OBSERVABILITY
+================================================================================
+
+12.1 Logging setup
+------------------
+- Console logs at INFO level.
+- Rotating file logs at DEBUG level.
+- Log file path: logs/canteen_system.log
+- Rotation: 10 MB per file, 5 backups.
+
+12.2 Important runtime messages
+-------------------------------
+- GPU detection status.
+- Database initialization.
+- Face model load success/failure.
+- Recognition thread start.
+- Visit log events.
+- RTSP reconnect attempts.
+
+
+================================================================================
+13. TESTING AND DIAGNOSTICS
+================================================================================
+
+13.1 Current test folder layout
+-------------------------------
+All tests are located in tests/:
+- tests/test_detection_recognition.py
+- tests/test_rtsp.py
+- tests/test_system.py
+
+13.2 Test file purposes
+-----------------------
+- test_detection_recognition.py:
+  Component-level diagnostic for container, detection, recognition, and frame
+  processor initialization and basic functionality.
+
+- test_rtsp.py:
+  Interactive utility to test RTSP stream and webcam connectivity before running
+  full application.
+
+- test_system.py:
+  Interactive end-to-end manual test flow for registration and webcam operation.
+
+13.3 How to run tests
+---------------------
+From project root:
+- python tests/test_detection_recognition.py
+- python tests/test_rtsp.py
+- python tests/test_system.py
+
+13.4 Test notes
+---------------
+- These are mostly interactive/manual diagnostics, not unit tests for CI.
+- Camera/RTSP-dependent tests require hardware/network availability.
+
+
+================================================================================
+14. OPERATIONAL COMMAND REFERENCE
+================================================================================
+
+14.1 Initial setup
+------------------
+- python -m venv venv
+- venv\Scripts\activate
+- pip install -r requirements.txt
+- python setup.py
+
+14.2 Launch
+-----------
+- python gui.py
+- python main.py
+
+14.3 Common maintenance actions
+-------------------------------
+- View logs: open logs/canteen_system.log
+- Backup DB: copy database/canteen.db
+- Clear screenshots manually from screenshots/
+- Rebuild known face cache: restart app or trigger reload after registration
+
+14.4 Batch scripts
+------------------
+- start.bat: runs setup then launches GUI.
+- rtsp_config.bat: helper to toggle RTSP in config.py.
+
+Operational caveat:
+rtsp_config.bat currently uses python test_rtsp.py, while tests are now located
+in tests/. Use python tests/test_rtsp.py directly if needed.
+
+
+================================================================================
+15. PERFORMANCE CHARACTERISTICS AND TUNING GUIDELINES
+================================================================================
+
+15.1 Main performance drivers
+-----------------------------
+- FACE_EMBEDDING_MODEL (Facenet vs larger models)
+- PROCESS_INTERVAL_FRAMES
+- FRAME_WIDTH / FRAME_HEIGHT
+- USE_GPU and actual CUDA availability
+- RTSP buffering and network quality
+
+15.2 Throughput vs latency trade-offs
+-------------------------------------
+- Smaller process interval: fresher recognition, higher compute load.
+- Larger process interval: better FPS, slower recognition updates.
+- Queue size 1 for recognition minimizes stale decisions.
+
+15.3 Practical tuning sequence
+------------------------------
+1. Keep DNN detector enabled.
+2. Start with 640x480 resolution.
+3. Set PROCESS_INTERVAL_FRAMES around 5-10.
+4. Validate recognition threshold with real users.
+5. Adjust cooldown to control repeated logs.
+
+
+================================================================================
+16. SECURITY AND DATA HANDLING NOTES
+================================================================================
+
+16.1 Sensitive data stored
+--------------------------
+- Face embeddings in database.
+- Face images in database/faces.
+- Visit screenshots in screenshots.
+
+16.2 Minimum recommended controls
+---------------------------------
+- Restrict local filesystem access.
+- Control who can access canteen.db and face image folders.
+- Encrypt device storage when possible.
+- Avoid exposing DB directory over shared network paths.
+
+16.3 Privacy operation suggestions
+----------------------------------
+- Define retention policy for screenshots and unknown faces.
+- Use role-based access for admin UI usage.
+- Document consent policy where required by institution rules.
+
+
+================================================================================
+17. KNOWN LIMITATIONS AND RISKS
+================================================================================
+
+- Recognition quality depends heavily on lighting and camera angle.
+- DeepFace model load can be slow on first run.
+- RTSP reliability depends on network stability and source stream quality.
+- Most tests are interactive and not CI-automated.
+- Unknown face handling exists at repository level but is not deeply surfaced in
+  the main GUI workflows.
+
+
+================================================================================
+18. RECENT STABILITY HARDENING NOTE
+================================================================================
+
+Student deletion path now tolerates non-string student IDs during sanitization.
+This avoids crashes when UI selection values provide integer-like data.
+
+Applied behavior:
+- sanitize_student_id converts input to string before regex processing.
+- delete() returns False safely if sanitized ID becomes empty.
+
+
+================================================================================
+19. TROUBLESHOOTING PLAYBOOK
+================================================================================
+
+19.1 Camera fails to open
+-------------------------
+- Confirm no other application locks the device.
+- Try different CAMERA_INDEX values.
+- Validate webcam permission in OS settings.
+
+19.2 RTSP cannot connect
+------------------------
+- Verify RTSP URL and credentials.
+- Confirm source stream is active.
+- Test stream with VLC.
+- Reduce RTSP buffering and use TCP transport.
+
+19.3 Face not recognized
+------------------------
+- Re-register student with better lighting and multiple poses.
+- Verify FACE_EMBEDDING_MODEL consistency between registration and runtime.
+- Tune FACE_RECOGNITION_THRESHOLD in small increments.
+
+19.4 Too many wrong matches
+---------------------------
+- Lower FACE_RECOGNITION_THRESHOLD for stricter matching.
+- Increase DNN_CONFIDENCE_THRESHOLD.
+- Increase MIN_FACE_SIZE.
+
+19.5 Low FPS or lag
+-------------------
+- Lower frame resolution.
+- Increase PROCESS_INTERVAL_FRAMES.
+- Confirm GPU is actually detected.
+- Use smaller embedding model if needed.
+
+
+================================================================================
+20. MAINTENANCE AND EXTENSIBILITY GUIDE
+================================================================================
+
+20.1 Safe extension points
+--------------------------
+- Add new detector backend in DetectionService.
+- Add alternate matching strategy in app/utils/face_matcher.py.
+- Add analytics export in ReportService.
+- Add UI tabs in gui_app.py while keeping repository/service boundaries.
+
+20.2 Design rules to keep
+-------------------------
+- Keep data access inside repositories.
+- Keep orchestration in services.
+- Keep entry points thin (main.py and gui.py).
+- Use container wiring for dependencies.
+
+20.3 Recommended next engineering improvements
+----------------------------------------------
+- Add automated unit tests with pytest for repositories and utility functions.
+- Add integration tests with temporary SQLite DB fixtures.
+- Add structured error popups/logging for failed repository actions in GUI.
+- Add retention/cleanup jobs for screenshots and unknown face records.
+
+
+================================================================================
+END OF DOCUMENT
+================================================================================
