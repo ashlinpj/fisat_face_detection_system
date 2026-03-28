@@ -6,6 +6,7 @@ Real-time face detection and recognition for tracking canteen visits
 import cv2
 import sys
 import os
+import math
 from datetime import datetime
 import numpy as np
 from threading import Thread
@@ -38,25 +39,340 @@ class CanteenFaceDetectionApp:
         print("[3/3] Setting up camera...")
         self.cap = None
         self.is_running = False
+        self.active_source = config.CAMERA_INDEX
         self.frame_buffer = queue.Queue(maxsize=config.FRAME_BUFFER_SIZE)
         self.capture_thread = None
         self.capture_thread_running = False
+        self.multi_cameras = []
         
         print("\nSystem initialized successfully!")
         print("-" * 60)
+
+    def _is_rtsp_source(self, source):
+        return isinstance(source, str) and source.lower().startswith("rtsp://")
+
+    def _is_network_source(self, source):
+        if not isinstance(source, str):
+            return False
+        lowered = source.lower()
+        return (
+            lowered.startswith("rtsp://")
+            or lowered.startswith("http://")
+            or lowered.startswith("https://")
+        )
+
+    def _normalize_source(self, source):
+        if isinstance(source, int):
+            return source
+        if isinstance(source, str):
+            stripped = source.strip()
+            if stripped.isdigit():
+                return int(stripped)
+            return stripped
+        return source
+
+    def _get_camera_sources(self):
+        configured_sources = [
+            self._normalize_source(s)
+            for s in getattr(config, "CAMERA_SOURCES", [])
+            if str(s).strip() != ""
+        ]
+
+        if getattr(config, "USE_MULTI_CAMERA", False) and configured_sources:
+            return configured_sources
+        if len(configured_sources) > 1:
+            return configured_sources
+        if config.USE_RTSP:
+            return [config.RTSP_URL]
+        if configured_sources:
+            return [configured_sources[0]]
+        return [config.CAMERA_INDEX]
+
+    def _is_multi_camera_enabled(self):
+        return len(self._get_camera_sources()) > 1
+
+    def _source_label(self, source, index):
+        if isinstance(source, int):
+            return f"Cam-{index + 1} (USB:{source})"
+        text = str(source)
+        if len(text) > 45:
+            text = text[:42] + "..."
+        return f"Cam-{index + 1} ({text})"
+
+    def _open_capture_for_source(self, source):
+        is_rtsp = self._is_rtsp_source(source)
+
+        if is_rtsp:
+            rtsp_opts = [f"{k};{v}" for k, v in config.RTSP_OPENCV_OPTIONS.items()]
+            os.environ["OPENCV_FFMPEG_CAPTURE_OPTIONS"] = "|".join(rtsp_opts)
+            cap = cv2.VideoCapture(source, cv2.CAP_FFMPEG)
+            cap.set(cv2.CAP_PROP_BUFFERSIZE, config.RTSP_BUFFER_SIZE)
+            cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*'H264'))
+            if config.RTSP_TARGET_FPS:
+                cap.set(cv2.CAP_PROP_FPS, config.RTSP_TARGET_FPS)
+        else:
+            cap = cv2.VideoCapture(source)
+            cap.set(cv2.CAP_PROP_FRAME_WIDTH, config.FRAME_WIDTH)
+            cap.set(cv2.CAP_PROP_FRAME_HEIGHT, config.FRAME_HEIGHT)
+            cap.set(cv2.CAP_PROP_FPS, config.FPS)
+            cap.set(cv2.CAP_PROP_BUFFERSIZE, config.RTSP_BUFFER_SIZE)
+
+        if not cap.isOpened():
+            return None
+
+        # Ask OpenCV to use hardware decoding path when backend supports it.
+        if getattr(config, 'RTSP_USE_HW_ACCEL', True):
+            try:
+                if hasattr(cv2, 'CAP_PROP_HW_ACCELERATION') and hasattr(cv2, 'VIDEO_ACCELERATION_ANY'):
+                    cap.set(cv2.CAP_PROP_HW_ACCELERATION, cv2.VIDEO_ACCELERATION_ANY)
+                if hasattr(cv2, 'CAP_PROP_HW_DEVICE'):
+                    cap.set(cv2.CAP_PROP_HW_DEVICE, 0)
+            except Exception:
+                pass
+
+        ret, _ = cap.read()
+        if not ret:
+            cap.release()
+            return None
+        return cap
+
+    def _new_camera_state(self, source, index):
+        return {
+            "source": source,
+            "label": self._source_label(source, index),
+            "cap": None,
+            "frame_buffer": queue.Queue(maxsize=config.FRAME_BUFFER_SIZE),
+            "thread": None,
+            "thread_running": False,
+            "failed_reads": 0,
+            "last_raw_frame": None,
+        }
+
+    def _start_multi_capture_thread(self, state):
+        self._stop_multi_capture_thread(state)
+        state["thread_running"] = True
+
+        def capture_loop():
+            while state["thread_running"] and state["cap"]:
+                try:
+                    if self._is_rtsp_source(state["source"]) and config.RTSP_PREGRAB_COUNT > 0:
+                        for _ in range(config.RTSP_PREGRAB_COUNT):
+                            state["cap"].grab()
+
+                    ret, frame = state["cap"].read()
+                    if not ret:
+                        time.sleep(0.01)
+                        continue
+
+                    if state["frame_buffer"].full():
+                        try:
+                            state["frame_buffer"].get_nowait()
+                        except queue.Empty:
+                            pass
+
+                    try:
+                        state["frame_buffer"].put_nowait(frame)
+                    except queue.Full:
+                        pass
+                except Exception:
+                    time.sleep(0.01)
+
+        state["thread"] = Thread(target=capture_loop, daemon=True)
+        state["thread"].start()
+
+    def _stop_multi_capture_thread(self, state):
+        state["thread_running"] = False
+        if state.get("thread"):
+            state["thread"].join(timeout=1.0)
+        state["thread"] = None
+
+    def _get_latest_frame_from_state(self, state):
+        try:
+            frame = state["frame_buffer"].get(timeout=config.FRAME_FETCH_TIMEOUT)
+        except queue.Empty:
+            return None
+
+        while not state["frame_buffer"].empty():
+            try:
+                frame = state["frame_buffer"].get_nowait()
+            except queue.Empty:
+                break
+        return frame
+
+    def _reconnect_camera_state(self, state):
+        self._stop_multi_capture_thread(state)
+        if state["cap"]:
+            state["cap"].release()
+            state["cap"] = None
+
+        source = state["source"]
+        attempts = config.RTSP_RECONNECT_ATTEMPTS if self._is_network_source(source) else 2
+        for attempt in range(attempts):
+            cap = self._open_capture_for_source(source)
+            if cap is not None:
+                state["cap"] = cap
+                state["failed_reads"] = 0
+                self._start_multi_capture_thread(state)
+                print(f"✓ Reconnected {state['label']}")
+                return True
+            if attempt < attempts - 1:
+                time.sleep(config.RTSP_RECONNECT_DELAY)
+
+        print(f"✗ Reconnect failed for {state['label']}")
+        return False
+
+    def _build_multi_display(self, processed_items, fps):
+        if config.SHOW_WINDOW:
+            tile_w = 640
+            tile_h = 360
+            total = len(processed_items)
+            cols = 1 if total == 1 else 2
+            rows = int(math.ceil(total / cols))
+
+            canvas = np.zeros((rows * tile_h, cols * tile_w, 3), dtype=np.uint8)
+            for idx, item in enumerate(processed_items):
+                row = idx // cols
+                col = idx % cols
+                x0 = col * tile_w
+                y0 = row * tile_h
+
+                resized = cv2.resize(item["frame"], (tile_w, tile_h), interpolation=cv2.INTER_LINEAR)
+                known = sum(1 for p in item["recognized"] if p.get("is_known"))
+                unknown = len(item["recognized"]) - known
+                label_text = f"{item['label']} | Faces:{len(item['recognized'])} K:{known} U:{unknown}"
+
+                cv2.putText(
+                    resized,
+                    label_text,
+                    (12, 28),
+                    cv2.FONT_HERSHEY_SIMPLEX,
+                    0.65,
+                    (0, 255, 255),
+                    2,
+                )
+                canvas[y0:y0 + tile_h, x0:x0 + tile_w] = resized
+
+            cv2.putText(
+                canvas,
+                f"Overall FPS: {fps:.1f}",
+                (20, canvas.shape[0] - 20),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.8,
+                (0, 255, 0),
+                2,
+            )
+            return canvas
+
+        display_width = 1000
+        display_height = 700
+        canvas = np.zeros((display_height, display_width, 3), dtype=np.uint8)
+        canvas[:] = (30, 30, 30)
+
+        cv2.putText(
+            canvas,
+            "People Detected Across Cameras",
+            (display_width // 2 - 300, 50),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            1.1,
+            (255, 255, 255),
+            2,
+        )
+        cv2.line(canvas, (40, 70), (display_width - 40, 70), (100, 100, 100), 2)
+
+        y = 120
+        for item in processed_items:
+            names = []
+            for p in item["recognized"]:
+                if p.get("is_known") and p.get("name"):
+                    names.append(p["name"])
+                elif not p.get("is_known"):
+                    names.append("Unknown Person")
+
+            unique_names = list(dict.fromkeys(names))
+            text = ", ".join(unique_names) if unique_names else "No detections"
+
+            cv2.putText(
+                canvas,
+                f"{item['label']}: {text}",
+                (60, y),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.72,
+                (120, 255, 120),
+                2,
+            )
+            y += 48
+            if y > display_height - 80:
+                break
+
+        cv2.putText(
+            canvas,
+            f"FPS: {fps:.1f} | Cameras: {len(processed_items)}",
+            (display_width // 2 - 170, display_height - 20),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.65,
+            (200, 200, 200),
+            2,
+        )
+        return canvas
+
+    def _start_multi_camera(self):
+        self._stop_multi_camera()
+        sources = self._get_camera_sources()
+
+        print("Connecting to camera sources:")
+        connected = 0
+        self.multi_cameras = []
+
+        for idx, source in enumerate(sources):
+            state = self._new_camera_state(source, idx)
+            cap = self._open_capture_for_source(source)
+            if cap is None:
+                print(f"  ✗ Could not open {state['label']}")
+                continue
+
+            state["cap"] = cap
+            self._start_multi_capture_thread(state)
+            self.multi_cameras.append(state)
+            connected += 1
+            print(f"  ✓ Connected {state['label']}")
+
+        if connected == 0:
+            print("ERROR: No camera source could be opened.")
+            return False
+
+        print(f"Connected {connected}/{len(sources)} camera source(s).")
+        return True
+
+    def _stop_multi_camera(self):
+        for state in self.multi_cameras:
+            self._stop_multi_capture_thread(state)
+            if state.get("cap"):
+                state["cap"].release()
+                state["cap"] = None
+        self.multi_cameras = []
+
+    def _get_registration_frame_from_multi(self):
+        for state in self.multi_cameras:
+            if state.get("last_raw_frame") is not None:
+                return state["last_raw_frame"].copy()
+        return None
     
     def start_camera(self):
         """Start the camera capture (webcam or RTSP stream)"""
-        if config.USE_RTSP:
+        source = self._get_camera_sources()[0]
+        self.active_source = source
+        is_rtsp = self._is_rtsp_source(source)
+
+        if is_rtsp:
             # RTSP Stream mode
-            print(f"Connecting to RTSP stream: {config.RTSP_URL}")
+            print(f"Connecting to RTSP stream: {source}")
             
             # Set RTSP options for lower latency and fewer stale frames
             rtsp_opts = [f"{k};{v}" for k, v in config.RTSP_OPENCV_OPTIONS.items()]
             os.environ["OPENCV_FFMPEG_CAPTURE_OPTIONS"] = "|".join(rtsp_opts)
             
             for attempt in range(config.RTSP_RECONNECT_ATTEMPTS):
-                self.cap = cv2.VideoCapture(config.RTSP_URL, cv2.CAP_FFMPEG)
+                self.cap = cv2.VideoCapture(source, cv2.CAP_FFMPEG)
                 
                 # Set buffer size to reduce latency
                 self.cap.set(cv2.CAP_PROP_BUFFERSIZE, config.RTSP_BUFFER_SIZE)
@@ -71,7 +387,7 @@ class CanteenFaceDetectionApp:
                     ret, test_frame = self.cap.read()
                     if ret:
                         print(f"✓ RTSP stream connected successfully!")
-                        print(f"  Stream: {config.RTSP_URL}")
+                        print(f"  Stream: {source}")
                         print(f"  Resolution: {int(self.cap.get(cv2.CAP_PROP_FRAME_WIDTH))}x{int(self.cap.get(cv2.CAP_PROP_FRAME_HEIGHT))}")
                         self._clear_frame_buffer()
                         self._start_capture_thread()
@@ -85,13 +401,13 @@ class CanteenFaceDetectionApp:
             print("Please check:")
             print("  1. RTSP server is running (e.g., OBS with RTSP output)")
             print("  2. RTSP URL is correct")
-            print(f"  3. Current URL: {config.RTSP_URL}")
+            print(f"  3. Current URL: {source}")
             print("  4. Firewall is not blocking the connection")
             print("\nTip: To use webcam instead, set USE_RTSP = False in config.py")
             return False
         else:
-            # Webcam mode
-            self.cap = cv2.VideoCapture(config.CAMERA_INDEX)
+            # Webcam/IP Webcam mode
+            self.cap = cv2.VideoCapture(source)
             self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, config.FRAME_WIDTH)
             self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, config.FRAME_HEIGHT)
             self.cap.set(cv2.CAP_PROP_FPS, config.FPS)
@@ -101,10 +417,10 @@ class CanteenFaceDetectionApp:
                 print("Please check:")
                 print("  1. Camera is connected")
                 print("  2. Camera is not being used by another application")
-                print(f"  3. Camera index is correct (current: {config.CAMERA_INDEX})")
+                print(f"  3. Camera source is correct (current: {source})")
                 return False
             
-            print(f"✓ Camera opened successfully (Index: {config.CAMERA_INDEX})")
+            print(f"✓ Camera opened successfully (Source: {source})")
             self._clear_frame_buffer()
             self._start_capture_thread()
             return True
@@ -125,8 +441,11 @@ class CanteenFaceDetectionApp:
         def capture_loop():
             while self.capture_thread_running and self.cap:
                 try:
-                    if config.USE_RTSP and config.RTSP_PREGRAB_COUNT > 0:
-                        for _ in range(config.RTSP_PREGRAB_COUNT):
+                    if self._is_network_source(self.active_source):
+                        drain_count = int(getattr(config, 'RTSP_PREGRAB_COUNT', 0))
+                        if getattr(config, 'REALTIME_ONLY_MODE', False):
+                            drain_count = max(drain_count, 1)
+                        for _ in range(max(0, drain_count)):
                             self.cap.grab()
 
                     ret, frame = self.cap.read()
@@ -180,6 +499,9 @@ class CanteenFaceDetectionApp:
     
     def run_detection(self):
         """Main detection loop"""
+        if self._is_multi_camera_enabled():
+            return self.run_multi_detection()
+
         if not self.start_camera():
             return
         
@@ -204,9 +526,10 @@ class CanteenFaceDetectionApp:
         # Track consecutive failed reads for RTSP reconnection
         failed_reads = 0
         max_failed_reads = 30  # Try to reconnect after 30 consecutive failures
+        active_is_network = self._is_network_source(self.active_source)
         
         while self.is_running:
-            if config.USE_RTSP and getattr(config, 'RTSP_RESTART_INTERVAL', 0) > 0:
+            if active_is_network and getattr(config, 'RTSP_RESTART_INTERVAL', 0) > 0:
                 if time.time() - last_restart >= config.RTSP_RESTART_INTERVAL:
                     print("\nPeriodic RTSP restart to clear artifacts...")
                     self.stop_camera()
@@ -225,7 +548,7 @@ class CanteenFaceDetectionApp:
                     print(f"Warning: Could not read frame from camera (attempt {failed_reads})")
                 
                 # If using RTSP and multiple failures, try to reconnect
-                if config.USE_RTSP and failed_reads >= max_failed_reads:
+                if active_is_network and failed_reads >= max_failed_reads:
                     print("\nRTSP stream lost. Attempting to reconnect...")
                     self.stop_camera()
                     time.sleep(2)
@@ -408,8 +731,101 @@ class CanteenFaceDetectionApp:
         
         self.stop_camera()
         print("Detection stopped.")
+
+    def run_multi_detection(self):
+        """Detection loop for multiple camera sources."""
+        if not self._start_multi_camera():
+            return
+
+        self.is_running = True
+        frame_count = 0
+        start_time = time.time()
+        fps = 0.0
+
+        print("\n" + "=" * 60)
+        print("MULTI-CAMERA DETECTION STARTED")
+        print("=" * 60)
+        print(f"Active cameras: {len(self.multi_cameras)}")
+        print("Controls: [Q] Quit | [R] Register | [S] Stats | [L] Logs | [SPACE] Screenshot")
+        print("-" * 60)
+
+        max_failed_reads = 30
+        last_display = None
+
+        while self.is_running:
+            processed_items = []
+
+            for state in list(self.multi_cameras):
+                frame = self._get_latest_frame_from_state(state)
+                if frame is None:
+                    state["failed_reads"] += 1
+                    if state["failed_reads"] >= max_failed_reads:
+                        print(f"\nStream stalled for {state['label']}. Reconnecting...")
+                        self._reconnect_camera_state(state)
+                    continue
+
+                state["failed_reads"] = 0
+                state["last_raw_frame"] = frame
+                annotated_frame, recognized_people = self.face_system.process_frame(frame)
+
+                if getattr(config, 'LOG_RECOGNITIONS', True) and recognized_people:
+                    names = [
+                        f"{p['name']} ({p['confidence']:.2f})"
+                        for p in recognized_people
+                        if p.get('name')
+                    ]
+                    if names:
+                        print(f"[{state['label']}] Detected: {', '.join(names)}")
+
+                processed_items.append({
+                    "label": state["label"],
+                    "frame": annotated_frame,
+                    "recognized": recognized_people,
+                })
+
+            if not processed_items:
+                time.sleep(0.05)
+                continue
+
+            frame_count += 1
+            elapsed_time = time.time() - start_time
+            if elapsed_time >= 1.0:
+                fps = frame_count / elapsed_time
+                frame_count = 0
+                start_time = time.time()
+
+            display_frame = self._build_multi_display(processed_items, fps)
+            last_display = display_frame
+            cv2.imshow(config.WINDOW_TITLE + " - Multi Camera", display_frame)
+
+            key = cv2.waitKey(1) & 0xFF
+
+            if key == ord('q') or key == ord('Q'):
+                print("\nQuitting...")
+                self.is_running = False
+
+            elif key == ord('r') or key == ord('R'):
+                reg_frame = self._get_registration_frame_from_multi()
+                if reg_frame is not None:
+                    self.register_student_interactive(reg_frame, self._get_registration_frame_from_multi)
+                else:
+                    print("No camera frame available for registration.")
+
+            elif key == ord('s') or key == ord('S'):
+                self.show_statistics()
+
+            elif key == ord('l') or key == ord('L'):
+                self.show_todays_logs()
+
+            elif key == ord(' '):
+                if last_display is not None:
+                    self.capture_screenshot(last_display)
+
+        self._stop_multi_camera()
+        cv2.destroyAllWindows()
+        print("Detection stopped.")
     
-    def register_student_interactive(self, frame):
+    def register_student_interactive(self, frame, live_frame_getter=None):
         """Interactive student registration"""
         print("\n" + "=" * 40)
         print("  STUDENT REGISTRATION")
@@ -452,8 +868,15 @@ class CanteenFaceDetectionApp:
             
             # Countdown
             for i in range(3, 0, -1):
-                ret, preview_frame = self.cap.read()
-                if ret:
+                preview_frame = None
+                if live_frame_getter is not None:
+                    preview_frame = live_frame_getter()
+                elif self.cap is not None:
+                    ret, tmp_frame = self.cap.read()
+                    if ret:
+                        preview_frame = tmp_frame
+
+                if preview_frame is not None:
                     cv2.putText(
                         preview_frame,
                         f"Capturing in {i}...",
@@ -467,8 +890,15 @@ class CanteenFaceDetectionApp:
                 cv2.waitKey(1000)
             
             # Capture frame for registration
-            ret, capture_frame = self.cap.read()
-            if ret:
+            capture_frame = None
+            if live_frame_getter is not None:
+                capture_frame = live_frame_getter()
+            elif self.cap is not None:
+                ret, tmp_frame = self.cap.read()
+                if ret:
+                    capture_frame = tmp_frame
+
+            if capture_frame is not None:
                 success = self.face_system.register_new_student(
                     capture_frame, student_id, name, department, year
                 )
@@ -600,7 +1030,7 @@ def main():
             if choice == '1':
                 app.run_detection()
             elif choice == '2':
-                # Open camera for registration
+                # Open first configured camera source for registration
                 if app.start_camera():
                     ret, frame = app.cap.read()
                     if ret:

@@ -9,6 +9,7 @@ import cv2
 import numpy as np
 from PIL import Image, ImageTk
 import threading
+import time
 import os
 import sys
 from datetime import datetime, timedelta
@@ -64,6 +65,18 @@ class CanteenFaceDetectionGUI:
         self.face_system = None
         self.current_frame = None
         self.video_thread = None
+        self.capture_thread = None
+        self.capture_thread_running = False
+        self.latest_frame = None
+        self.latest_frame_lock = threading.Lock()
+        self.cap_lock = threading.Lock()
+        self.last_frame_ts = 0.0
+        self.registration_mode = False
+        self.ui_update_pending = False
+        self.recent_ui_last_seen = {}
+        self.recent_ui_update_ts = 0.0
+        self.recent_ui_update_interval_sec = 0.5
+        self.recent_ui_name_cooldown_sec = 2.0
         
         # Style configuration
         self.setup_styles()
@@ -373,33 +386,42 @@ class CanteenFaceDetectionGUI:
             self.stop_detection()
         else:
             self.start_detection()
-    
-    def start_detection(self):
-        """Start live detection (webcam or RTSP)"""
-        if self.face_system is None:
-            messagebox.showerror("Error", "System not initialized yet!")
-            return
-        
+
+    def _open_camera_capture(self, show_errors=True):
+        """Open webcam/RTSP capture without starting detection loop."""
         if config.USE_RTSP:
-            # RTSP Stream mode
-            os.environ["OPENCV_FFMPEG_CAPTURE_OPTIONS"] = "rtsp_transport;tcp"
-            
+            rtsp_opts = [f"{k};{v}" for k, v in config.RTSP_OPENCV_OPTIONS.items()]
+            os.environ["OPENCV_FFMPEG_CAPTURE_OPTIONS"] = "|".join(rtsp_opts)
+
+            cap = None
             for attempt in range(config.RTSP_RECONNECT_ATTEMPTS):
-                self.cap = cv2.VideoCapture(config.RTSP_URL, cv2.CAP_FFMPEG)
-                self.cap.set(cv2.CAP_PROP_BUFFERSIZE, config.RTSP_BUFFER_SIZE)
-                # Disable internal auto-exposure/gain adjustments that can degrade quality
-                self.cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*'H264'))
-                
-                if self.cap.isOpened():
-                    ret, test_frame = self.cap.read()
+                cap = cv2.VideoCapture(config.RTSP_URL, cv2.CAP_FFMPEG)
+                cap.set(cv2.CAP_PROP_BUFFERSIZE, config.RTSP_BUFFER_SIZE)
+                cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*'H264'))
+                if config.RTSP_TARGET_FPS:
+                    cap.set(cv2.CAP_PROP_FPS, config.RTSP_TARGET_FPS)
+                if getattr(config, 'RTSP_USE_HW_ACCEL', True):
+                    try:
+                        if hasattr(cv2, 'CAP_PROP_HW_ACCELERATION') and hasattr(cv2, 'VIDEO_ACCELERATION_ANY'):
+                            cap.set(cv2.CAP_PROP_HW_ACCELERATION, cv2.VIDEO_ACCELERATION_ANY)
+                        if hasattr(cv2, 'CAP_PROP_HW_DEVICE'):
+                            cap.set(cv2.CAP_PROP_HW_DEVICE, 0)
+                    except Exception:
+                        pass
+
+                if cap.isOpened():
+                    ret, _ = cap.read()
                     if ret:
-                        break
-                
+                        return cap
+
+                if cap:
+                    cap.release()
+                    cap = None
+
                 if attempt < config.RTSP_RECONNECT_ATTEMPTS - 1:
-                    import time
                     time.sleep(config.RTSP_RECONNECT_DELAY)
-            
-            if not self.cap.isOpened():
+
+            if show_errors:
                 messagebox.showerror(
                     "RTSP Error",
                     f"Could not connect to RTSP stream!\n\nURL: {config.RTSP_URL}\n\n"
@@ -409,18 +431,33 @@ class CanteenFaceDetectionGUI:
                     f"3. Firewall is not blocking connection\n\n"
                     f"To use webcam: Set USE_RTSP = False in config.py"
                 )
-                return
-        else:
-            # Webcam mode
-            self.cap = cv2.VideoCapture(config.CAMERA_INDEX)
-            self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, config.FRAME_WIDTH)
-            self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, config.FRAME_HEIGHT)
-            
-            if not self.cap.isOpened():
+            return None
+
+        cap = cv2.VideoCapture(config.CAMERA_INDEX)
+        cap.set(cv2.CAP_PROP_FRAME_WIDTH, config.FRAME_WIDTH)
+        cap.set(cv2.CAP_PROP_FRAME_HEIGHT, config.FRAME_HEIGHT)
+
+        if not cap.isOpened():
+            if show_errors:
                 messagebox.showerror("Error", "Could not open camera!")
-                return
+            return None
+
+        return cap
+    
+    def start_detection(self):
+        """Start live detection (webcam or RTSP)"""
+        if self.face_system is None:
+            messagebox.showerror("Error", "System not initialized yet!")
+            return
+        self.cap = self._open_camera_capture(show_errors=True)
+        if self.cap is None:
+            return
         
         self.is_running = True
+        with self.latest_frame_lock:
+            self.latest_frame = None
+            self.last_frame_ts = 0.0
+        self._start_capture_thread()
         self.start_btn.config(text="⏹ Stop Detection")
         if config.USE_RTSP:
             self.update_status(f"🟢 RTSP Stream Active", "green")
@@ -433,38 +470,177 @@ class CanteenFaceDetectionGUI:
     def stop_detection(self):
         """Stop live detection"""
         self.is_running = False
+        self.ui_update_pending = False
+        self._stop_capture_thread()
         if self.cap:
             self.cap.release()
         self.start_btn.config(text="▶ Start Detection")
         self.update_status("⚪ Detection Stopped", "gray")
         self.video_label.config(image='', text="Camera stopped")
+
+    def _start_capture_thread(self):
+        """Continuously grab frames and keep only the freshest one."""
+        self._stop_capture_thread()
+        self.capture_thread_running = True
+
+        def capture_loop():
+            while self.capture_thread_running and self.cap:
+                try:
+                    frame = None
+
+                    if config.USE_RTSP:
+                        drain_count = int(getattr(config, 'RTSP_PREGRAB_COUNT', 0))
+                        if getattr(config, 'REALTIME_ONLY_MODE', False):
+                            drain_count = max(drain_count, 1)
+                        if self.registration_mode:
+                            drain_count = max(
+                                drain_count,
+                                int(getattr(config, 'REGISTRATION_PREGRAB_COUNT', 6))
+                            )
+
+                        read_burst = 1
+                        if self.registration_mode:
+                            read_burst = max(1, int(getattr(config, 'REGISTRATION_DRAIN_READS', 4)))
+
+                        for _ in range(read_burst):
+                            with self.cap_lock:
+                                for __ in range(max(0, drain_count)):
+                                    self.cap.grab()
+                                ret, fresh = self.cap.read()
+                                if ret:
+                                    frame = fresh
+                    else:
+                        with self.cap_lock:
+                            ret, fresh = self.cap.read()
+                        if ret:
+                            frame = fresh
+
+                    if frame is None:
+                        time.sleep(0.01)
+                        continue
+
+                    with self.latest_frame_lock:
+                        self.latest_frame = frame
+                        self.last_frame_ts = time.time()
+                except Exception:
+                    time.sleep(0.01)
+
+        self.capture_thread = threading.Thread(target=capture_loop, daemon=True)
+        self.capture_thread.start()
+
+    def _stop_capture_thread(self):
+        self.capture_thread_running = False
+        if self.capture_thread:
+            self.capture_thread.join(timeout=1.0)
+        self.capture_thread = None
+
+    def _get_latest_frame(self):
+        with self.latest_frame_lock:
+            if self.latest_frame is None:
+                return None
+            return self.latest_frame.copy()
+
+    def _get_fresh_latest_frame(self, max_age_sec=0.35, include_timestamp=False):
+        with self.latest_frame_lock:
+            if self.latest_frame is None:
+                return (None, 0.0) if include_timestamp else None
+            age = time.time() - self.last_frame_ts
+            if age > max_age_sec:
+                return (None, self.last_frame_ts) if include_timestamp else None
+            frame_copy = self.latest_frame.copy()
+            if include_timestamp:
+                return frame_copy, self.last_frame_ts
+            return frame_copy
+
+    def _reopen_rtsp_capture(self):
+        """Reconnect RTSP capture with low-latency options."""
+        self._stop_capture_thread()
+
+        rtsp_opts = [f"{k};{v}" for k, v in config.RTSP_OPENCV_OPTIONS.items()]
+        os.environ["OPENCV_FFMPEG_CAPTURE_OPTIONS"] = "|".join(rtsp_opts)
+
+        if self.cap:
+            try:
+                with self.cap_lock:
+                    self.cap.release()
+            except Exception:
+                pass
+
+        with self.latest_frame_lock:
+            self.latest_frame = None
+            self.last_frame_ts = 0.0
+
+        with self.cap_lock:
+            self.cap = cv2.VideoCapture(config.RTSP_URL, cv2.CAP_FFMPEG)
+            self.cap.set(cv2.CAP_PROP_BUFFERSIZE, config.RTSP_BUFFER_SIZE)
+            self.cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*'H264'))
+            if config.RTSP_TARGET_FPS:
+                self.cap.set(cv2.CAP_PROP_FPS, config.RTSP_TARGET_FPS)
+            if getattr(config, 'RTSP_USE_HW_ACCEL', True):
+                try:
+                    if hasattr(cv2, 'CAP_PROP_HW_ACCELERATION') and hasattr(cv2, 'VIDEO_ACCELERATION_ANY'):
+                        self.cap.set(cv2.CAP_PROP_HW_ACCELERATION, cv2.VIDEO_ACCELERATION_ANY)
+                    if hasattr(cv2, 'CAP_PROP_HW_DEVICE'):
+                        self.cap.set(cv2.CAP_PROP_HW_DEVICE, 0)
+                except Exception:
+                    pass
+
+        opened = self.cap.isOpened()
+        if opened and (self.is_running or self.registration_mode):
+            self._start_capture_thread()
+        return opened
+
+    def _read_current_frame_direct(self):
+        """Read a near-real-time frame directly from stream by flushing queued RTSP packets."""
+        if not self.cap:
+            return None
+
+        drain_count = int(getattr(config, 'REGISTRATION_DIRECT_PREGRAB_COUNT', 3))
+        with self.cap_lock:
+            if not self.cap:
+                return None
+            if config.USE_RTSP:
+                for _ in range(max(0, drain_count)):
+                    self.cap.grab()
+            ret, frame = self.cap.read()
+            if ret:
+                return frame
+        return None
     
     def video_loop(self):
         """Main video processing loop"""
-        import time
         frame_count = 0
         start_time = time.time()
         fps = 0
         failed_reads = 0
         max_failed_reads = 30
+        process_interval = max(1, int(getattr(config, 'GUI_PROCESS_EVERY_N_FRAMES', 4)))
+        recognition_interval_sec = max(0.05, float(getattr(config, 'GUI_RECOGNITION_INTERVAL_SEC', 0.25)))
+        ui_target_fps = max(5, int(getattr(config, 'GUI_UI_TARGET_FPS', 50)))
+        ui_period = 1.0 / ui_target_fps
+        next_recognition_at = 0.0
+        last_ui_update_time = 0.0
+        last_annotated_frame = None
+        last_recognized_people = []
+        skipped_recognition_frames = 0
         
         while self.is_running:
-            ret, frame = self.cap.read()
-            if not ret:
+            frame = self._get_latest_frame()
+            if frame is None:
+                if self.registration_mode:
+                    # Capture thread may be paused during direct registration preview.
+                    time.sleep(0.01)
+                    continue
                 failed_reads += 1
                 
                 # Try to reconnect RTSP stream
                 if config.USE_RTSP and failed_reads >= max_failed_reads:
                     self.root.after(0, lambda: self.update_status("🟡 Reconnecting RTSP...", "orange"))
-                    if self.cap:
-                        self.cap.release()
                     time.sleep(2)
-                    
-                    self.cap = cv2.VideoCapture(config.RTSP_URL, cv2.CAP_FFMPEG)
-                    self.cap.set(cv2.CAP_PROP_BUFFERSIZE, config.RTSP_BUFFER_SIZE)
+                    opened = self._reopen_rtsp_capture()
                     failed_reads = 0
                     
-                    if self.cap.isOpened():
+                    if opened:
                         self.root.after(0, lambda: self.update_status("🟢 RTSP Reconnected", "green"))
                         continue
                     else:
@@ -479,17 +655,49 @@ class CanteenFaceDetectionGUI:
             failed_reads = 0
             
             self.current_frame = frame.copy()
-            
-            # Process frame
-            annotated_frame, recognized_people = self.face_system.process_frame(frame)
+            now = time.time()
+
+            # During guided registration, prioritize smooth live preview over recognition.
+            if self.registration_mode:
+                frame_count += 1
+                elapsed = now - start_time
+                if elapsed >= 1.0:
+                    fps = frame_count / elapsed
+                    frame_count = 0
+                    start_time = now
+                time.sleep(0.001)
+                continue
+            else:
+                skipped_recognition_frames += 1
+                should_recognize = (
+                    last_annotated_frame is None
+                    or skipped_recognition_frames >= process_interval
+                    or now >= next_recognition_at
+                )
+
+                if should_recognize:
+                    # Run heavy face processing periodically to keep preview smooth.
+                    annotated_frame, recognized_people = self.face_system.process_frame(frame)
+                    last_annotated_frame = annotated_frame
+                    last_recognized_people = recognized_people
+                    skipped_recognition_frames = 0
+                    next_recognition_at = now + recognition_interval_sec
+                else:
+                    annotated_frame = frame
+                    recognized_people = last_recognized_people
             
             # Calculate FPS
             frame_count += 1
-            elapsed = time.time() - start_time
+            elapsed = now - start_time
             if elapsed >= 1.0:
                 fps = frame_count / elapsed
                 frame_count = 0
-                start_time = time.time()
+                start_time = now
+
+            if now - last_ui_update_time < ui_period:
+                time.sleep(0.001)
+                continue
+            last_ui_update_time = now
             
             # Create display based on SHOW_WINDOW setting
             if config.SHOW_WINDOW:
@@ -498,7 +706,7 @@ class CanteenFaceDetectionGUI:
                 display_frame = cv2.cvtColor(annotated_frame, cv2.COLOR_BGR2RGB)
                 
                 # Resize for display - smaller size for better screen fit
-                display_width = 640
+                display_width = max(320, int(getattr(config, 'GUI_PREVIEW_WIDTH', 640)))
                 h, w = display_frame.shape[:2]
                 scale = display_width / w
                 display_height = int(h * scale)
@@ -599,35 +807,61 @@ class CanteenFaceDetectionGUI:
             def update_ui():
                 self.video_label.imgtk = imgtk
                 self.video_label.config(image=imgtk)
-                
-                known = sum(1 for p in recognized_people if p['is_known'])
+
+                known = sum(1 for p in recognized_people if p.get('is_known', False))
                 unknown = len(recognized_people) - known
-                
+
                 self.detected_count_label.config(text=f"Faces Detected: {len(recognized_people)}")
                 self.known_count_label.config(text=f"Known: {known}")
                 self.unknown_count_label.config(text=f"Unknown: {unknown}")
                 self.fps_label.config(text=f"FPS: {fps:.1f}")
-                
-                # Update recent detections
-                for person in recognized_people:
-                    if person['is_known']:
-                        name = person['student']['name']
+
+                # Throttle listbox writes; updating this every frame causes Tk lag.
+                now_epoch = time.time()
+                if now_epoch - self.recent_ui_update_ts >= self.recent_ui_update_interval_sec:
+                    self.recent_ui_update_ts = now_epoch
+
+                    for person in recognized_people:
+                        if not person.get('is_known', False):
+                            continue
+
+                        name = person.get('name')
+                        if not name or name == 'Unknown':
+                            continue
+
+                        last_seen = self.recent_ui_last_seen.get(name, 0.0)
+                        if now_epoch - last_seen < self.recent_ui_name_cooldown_sec:
+                            continue
+
+                        self.recent_ui_last_seen[name] = now_epoch
                         time_str = datetime.now().strftime('%H:%M:%S')
                         self.recent_listbox.insert(0, f"{time_str} - {name}")
                         if self.recent_listbox.size() > 20:
                             self.recent_listbox.delete(20, tk.END)
             
-            self.root.after(0, update_ui)
+            if not self.ui_update_pending:
+                self.ui_update_pending = True
+
+                def wrapped_update_ui():
+                    try:
+                        update_ui()
+                    except Exception as e:
+                        # Prevent Tk callback crashes from killing the live loop.
+                        print(f"UI update warning: {e}")
+                    finally:
+                        self.ui_update_pending = False
+
+                self.root.after(0, wrapped_update_ui)
             
-            # Small delay to prevent overloading
-            time.sleep(0.03)
+            # Tiny delay keeps Tkinter responsive without heavily throttling FPS.
+            # In registration mode, avoid sleep to keep preview as smooth as possible.
+            if self.registration_mode:
+                time.sleep(0.0)
+            else:
+                time.sleep(0.005)
     
     def open_registration_dialog(self):
         """Open dialog to register new student"""
-        if not self.is_running:
-            messagebox.showwarning("Warning", "Please start detection first!")
-            return
-        
         dialog = tk.Toplevel(self.root)
         dialog.title("Register New Student")
         dialog.geometry("400x500")
@@ -654,9 +888,15 @@ class CanteenFaceDetectionGUI:
 
         ttk.Label(
             dialog,
-            text="We will capture ~10 guided poses (angles + glasses) for better training.",
+            text="We will capture 25 guided poses (all directions) for stronger accuracy.",
             wraplength=340
         ).pack(pady=(8, 4))
+
+        ttk.Label(
+            dialog,
+            text="A live preview window will open during capture so you can align your face.",
+            wraplength=340
+        ).pack(pady=(2, 6))
 
         include_glasses = tk.BooleanVar(value=True)
         ttk.Checkbutton(dialog, text="Include glasses captures (if applicable)", variable=include_glasses).pack()
@@ -670,31 +910,51 @@ class CanteenFaceDetectionGUI:
             if not student_id or not name:
                 messagebox.showerror("Error", "Student ID and Name are required!")
                 return
-            
-            if not self.cap or not self.cap.isOpened():
-                messagebox.showerror("Error", "Camera is not running. Start detection and try again.")
-                return
+
+            started_for_registration = False
+            if (not self.cap) or (not self.cap.isOpened()):
+                self.cap = self._open_camera_capture(show_errors=True)
+                if self.cap is None:
+                    return
+                started_for_registration = not self.is_running
+                if started_for_registration:
+                    with self.latest_frame_lock:
+                        self.latest_frame = None
+                        self.last_frame_ts = 0.0
+                    self._start_capture_thread()
 
             pose_script = self.get_pose_script(include_glasses=include_glasses.get())
             frames = self.capture_pose_sequence(pose_script)
 
-            if len(frames) < 6:
-                messagebox.showerror(
-                    "Error",
-                    "Could not capture enough samples. Please try again with clear face visibility."
-                )
-                return
+            try:
+                if len(frames) < 15:
+                    messagebox.showerror(
+                        "Error",
+                        "Could not capture enough samples. Need at least 15 clear captures."
+                    )
+                    return
 
-            success = self.face_system.register_student_from_frames(
-                frames, student_id, name, department, year
-            )
-            
-            if success:
-                messagebox.showinfo("Success", f"Student {name} registered with {len(frames)} samples!")
-                dialog.destroy()
-                self.refresh_students()
-            else:
-                messagebox.showerror("Error", "Failed to register student. Please ensure face is visible.")
+                success = self.face_system.register_student_from_frames(
+                    frames, student_id, name, department, year
+                )
+
+                if success:
+                    messagebox.showinfo("Success", f"Student {name} registered with {len(frames)} samples!")
+                    dialog.destroy()
+                    self.refresh_students()
+                else:
+                    messagebox.showerror("Error", "Failed to register student. Please ensure face is visible.")
+            finally:
+                if started_for_registration and not self.is_running:
+                    self._stop_capture_thread()
+                    if self.cap:
+                        self.cap.release()
+                    self.cap = None
+                    with self.latest_frame_lock:
+                        self.latest_frame = None
+                        self.last_frame_ts = 0.0
+                    self.video_label.config(image='', text="Camera not started")
+                    self.update_status("🟢 System Ready", "green")
         
         ttk.Button(dialog, text="📷 Capture & Register", command=do_register).pack(pady=20)
 
@@ -703,50 +963,195 @@ class CanteenFaceDetectionGUI:
         script = [
             ("Front - neutral (no glasses)", "Look straight ahead with a relaxed face."),
             ("Front - smile", "Smile naturally while facing the camera."),
+            ("Front - eyes closed", "Close eyes briefly while keeping head centered."),
+            ("Front - slight left tilt", "Tilt your head slightly left."),
+            ("Front - slight right tilt", "Tilt your head slightly right."),
             ("Left turn ~30°", "Turn your head slightly left; keep eyes on camera."),
             ("Right turn ~30°", "Turn your head slightly right; keep eyes on camera."),
+            ("Left turn ~45°", "Turn your head further left around 45 degrees."),
+            ("Right turn ~45°", "Turn your head further right around 45 degrees."),
             ("Left profile ~60°", "Turn further left so only part of the face is visible."),
             ("Right profile ~60°", "Turn further right so only part of the face is visible."),
+            ("Left near profile ~75°", "Turn left close to side profile."),
+            ("Right near profile ~75°", "Turn right close to side profile."),
             ("Chin slightly down", "Tilt your chin down a bit (as if looking at chest)."),
             ("Chin slightly up", "Tilt your chin up a bit (as if looking above camera)."),
+            ("Chin down + left", "Chin slightly down and look left."),
+            ("Chin down + right", "Chin slightly down and look right."),
+            ("Chin up + left", "Chin slightly up and look left."),
+            ("Chin up + right", "Chin slightly up and look right."),
             ("Bright light", "Step into brighter light facing the camera."),
             ("Softer light", "Step slightly aside to introduce mild shadows."),
+            ("Backlight mild", "Stand with light behind but keep face visible."),
+            ("Half-face shadow left", "Keep left side slightly shadowed."),
+            ("Half-face shadow right", "Keep right side slightly shadowed."),
+            ("Normal blink/smile", "Blink and smile naturally once."),
         ]
 
         if include_glasses:
             script.append(("With glasses - front", "Put on glasses (if any) and face the camera."))
             script.append(("With glasses - slight angle", "Glasses on; turn 20-30° to either side."))
+            script.append(("With glasses - left 45°", "Glasses on; turn left around 45 degrees."))
+            script.append(("With glasses - right 45°", "Glasses on; turn right around 45 degrees."))
 
         return script
 
     def capture_pose_sequence(self, pose_script):
-        """Guide the user through the pose script and capture frames."""
-        import time
-
+        """Guide the user through the pose script with a live preview for alignment."""
         captured_frames = []
         total = len(pose_script)
+        self.registration_mode = True
+        started_capture_for_registration = False
 
-        for idx, (title, tip) in enumerate(pose_script, start=1):
-            prompt = f"Step {idx}/{total}: {title}\n\n{tip}\n\nClick OK when ready to capture."
-            messagebox.showinfo("Capture Pose", prompt)
+        if config.USE_RTSP and getattr(config, 'FORCE_REOPEN_ON_REGISTRATION_START', True):
+            self._reopen_rtsp_capture()
 
-            # Small delay to let user settle after closing dialog
-            time.sleep(0.4)
+        # Keep a live background capture thread so preview stays smooth.
+        if self.cap and not self.capture_thread_running:
+            self._start_capture_thread()
+            started_capture_for_registration = True
 
+        guide = tk.Toplevel(self.root)
+        guide.title("Guided Pose Capture")
+        guide.geometry("760x620")
+        guide.transient(self.root)
+        guide.grab_set()
+
+        title_var = tk.StringVar(value="")
+        tip_var = tk.StringVar(value="")
+        progress_var = tk.StringVar(value="Step 1/1")
+        status_var = tk.StringVar(value="Align your face and click 'Capture This Pose'.")
+
+        ttk.Label(guide, textvariable=progress_var, font=('Segoe UI', 11, 'bold')).pack(pady=(10, 4))
+        ttk.Label(guide, textvariable=title_var, font=('Segoe UI', 12, 'bold')).pack(pady=(0, 4))
+        ttk.Label(guide, textvariable=tip_var, wraplength=700).pack(pady=(0, 8))
+
+        preview_label = ttk.Label(guide, text="Live preview loading...")
+        preview_label.pack(fill=tk.BOTH, expand=True, padx=10, pady=8)
+
+        controls = ttk.Frame(guide)
+        controls.pack(pady=8)
+
+        ttk.Label(guide, textvariable=status_var).pack(pady=(0, 10))
+
+        action_var = tk.StringVar(value="")
+        closed = {'value': False}
+        last_preview_ts = {'value': 0.0}
+        has_preview_frame = {'value': False}
+        preview_w = max(320, int(getattr(config, 'REGISTRATION_PREVIEW_WIDTH', 480)))
+        preview_h = max(180, int(getattr(config, 'REGISTRATION_PREVIEW_HEIGHT', 270)))
+
+        def capture_live_frame(use_direct=False):
             frame = None
-            if self.cap:
-                ret, raw = self.cap.read()
-                if ret:
-                    frame = raw.copy()
+            frame_ts = time.time()
+
+            # For preview, prefer freshest buffered frame for smoother FPS.
+            if not use_direct:
+                frame, frame_ts = self._get_fresh_latest_frame(
+                    max_age_sec=float(getattr(config, 'REGISTRATION_MAX_FRAME_AGE_SEC', 0.35)),
+                    include_timestamp=True,
+                )
+
+            # For actual capture, try a direct stream read first to avoid stale samples.
+            if frame is None and use_direct:
+                frame = self._read_current_frame_direct()
+                frame_ts = time.time()
+
+            if frame is None:
+                frame, frame_ts = self._get_fresh_latest_frame(
+                    max_age_sec=float(getattr(config, 'REGISTRATION_MAX_FRAME_AGE_SEC', 0.35)),
+                    include_timestamp=True,
+                )
+
+            # Preview should stay stable even when one cycle misses freshness window.
+            if frame is None:
+                frame = self._get_latest_frame()
+                frame_ts = time.time()
 
             if frame is None and self.current_frame is not None:
                 frame = self.current_frame.copy()
+                frame_ts = time.time()
+            return frame, frame_ts
 
+        def update_preview():
+            if closed['value']:
+                return
+
+            frame, frame_ts = capture_live_frame(use_direct=False)
+            if frame is not None:
+                # Skip costly conversion if we already rendered this exact frame timestamp.
+                if frame_ts > last_preview_ts['value']:
+                    h, w = frame.shape[:2]
+                    scale = min(preview_w / max(1, w), preview_h / max(1, h))
+                    new_w = max(1, int(w * scale))
+                    new_h = max(1, int(h * scale))
+                    resized_bgr = cv2.resize(frame, (new_w, new_h), interpolation=cv2.INTER_LINEAR)
+                    resized_rgb = cv2.cvtColor(resized_bgr, cv2.COLOR_BGR2RGB)
+                    imgtk = ImageTk.PhotoImage(image=Image.fromarray(resized_rgb))
+                    preview_label.imgtk = imgtk
+                    preview_label.config(image=imgtk, text="")
+                    last_preview_ts['value'] = frame_ts
+                    has_preview_frame['value'] = True
+            else:
+                if not has_preview_frame['value']:
+                    preview_label.config(image='', text="Waiting for live frame...")
+
+            guide.after(int(getattr(config, 'REGISTRATION_PREVIEW_REFRESH_MS', 33)), update_preview)
+
+        def on_capture():
+            action_var.set("capture")
+
+        def on_skip():
+            action_var.set("skip")
+
+        def on_cancel():
+            action_var.set("cancel")
+
+        ttk.Button(controls, text="📷 Capture This Pose", command=on_capture).pack(side=tk.LEFT, padx=6)
+        ttk.Button(controls, text="Skip", command=on_skip).pack(side=tk.LEFT, padx=6)
+        ttk.Button(controls, text="Cancel", command=on_cancel).pack(side=tk.LEFT, padx=6)
+
+        guide.protocol("WM_DELETE_WINDOW", on_cancel)
+        update_preview()
+
+        for idx, (title, tip) in enumerate(pose_script, start=1):
+            progress_var.set(f"Step {idx}/{total}")
+            title_var.set(title)
+            tip_var.set(tip)
+            status_var.set("Align your face and click 'Capture This Pose'.")
+            action_var.set("")
+
+            guide.wait_variable(action_var)
+            action = action_var.get()
+
+            if action == "cancel":
+                status_var.set("Capture cancelled.")
+                break
+
+            if action == "skip":
+                status_var.set(f"Skipped step {idx}.")
+                continue
+
+            frame, _ = capture_live_frame(use_direct=True)
             if frame is None:
-                messagebox.showwarning("Warning", f"Step {idx}: could not capture frame. Skipping.")
+                status_var.set(f"Step {idx}: no frame available. Skipped.")
                 continue
 
             captured_frames.append(frame)
+            status_var.set(f"Captured step {idx}. Total samples: {len(captured_frames)}")
+
+        closed['value'] = True
+        if guide.winfo_exists():
+            guide.destroy()
+
+        self.registration_mode = False
+
+        # Resume background latest-frame capture after registration.
+        if self.cap and (self.is_running or started_capture_for_registration):
+            self._start_capture_thread()
+
+        if config.USE_RTSP and getattr(config, 'FORCE_REOPEN_ON_REGISTRATION_END', True):
+            self._reopen_rtsp_capture()
 
         return captured_frames
     
@@ -945,6 +1350,7 @@ class CanteenFaceDetectionGUI:
     def on_closing(self):
         """Handle window close"""
         self.is_running = False
+        self._stop_capture_thread()
         if self.cap:
             self.cap.release()
         self.root.destroy()

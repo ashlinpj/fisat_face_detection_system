@@ -2,6 +2,56 @@
 
 ## 🚀 Quick Setup (5 Minutes)
 
+### Phone Camera Input (Fastest Setup)
+
+1. Connect phone and laptop to the same Wi-Fi.
+2. Start your phone camera stream app.
+   - Android IP Webcam example RTSP: `rtsp://PHONE_IP:8080/h264.sdp`
+3. Run:
+   ```bash
+   setup_phone_camera.bat
+   ```
+4. Start relay:
+   ```bash
+   start_go2rtc.bat
+   ```
+5. Run app:
+   ```bash
+   python main.py
+   ```
+
+The app will use the local relay URL `rtsp://127.0.0.1:8554/cam`.
+
+---
+
+### Option 0: Using go2rtc Local Relay (Best for Low Latency)
+
+1. **Download go2rtc for Windows**
+   - https://github.com/AlexxIT/go2rtc/releases
+   - Place `go2rtc.exe` inside this project folder.
+
+2. **Use bundled go2rtc config**
+   - File: `go2rtc.yaml`
+   - Default stream name is `cam`.
+   - Update source URL inside `go2rtc.yaml` if your camera IP changes.
+
+3. **Start relay**
+   ```bash
+   start_go2rtc.bat
+   ```
+
+4. **Verify relay endpoints**
+   - RTSP relay: `rtsp://127.0.0.1:8554/cam`
+   - go2rtc UI: `http://127.0.0.1:1984`
+
+5. **Run your app**
+   - `config.py` is already set to read from go2rtc local relay.
+   ```bash
+   python main.py
+   ```
+
+---
+
 ### Option A: Using OBS Studio (Recommended)
 
 1. **Install OBS Studio**

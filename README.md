@@ -148,8 +148,8 @@ python main.py
 
 ### Method 1: During Live Detection
 
-1. Start the detection (`python gui_app.py` or `python main.py`)
-2. Press `R` or click "Register Face"
+1. Open the app (`python gui_app.py` or `python main.py`)
+2. Press `R` or click "Register Face" (detection does not need to be running)
 3. Enter student details:
    - Student ID (e.g., 21CS001)
    - Full Name

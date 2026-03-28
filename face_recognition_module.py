@@ -65,6 +65,9 @@ def check_gpu():
     try:
         cv2_cuda = cv2.cuda.getCudaEnabledDeviceCount()
         if cv2_cuda > 0:
+            gpu_available = True
+            if gpu_name == "CPU":
+                gpu_name = "OpenCV CUDA"
             print(f"✓ OpenCV CUDA devices: {cv2_cuda}")
     except:
         pass
@@ -72,6 +75,8 @@ def check_gpu():
     if not gpu_available:
         print("⚠ No GPU detected - running on CPU mode")
         print("  To enable GPU: Install tensorflow-gpu or torch with CUDA support")
+    else:
+        print(f"✓ GPU mode enabled via: {gpu_name}")
     
     return gpu_available, gpu_name
 
@@ -84,16 +89,18 @@ class FaceRecognitionSystem:
         
         # Store current frame's recognized faces for display
         self.current_recognized_faces = {}  # bbox -> {name, confidence, timestamp}
+        self.pending_labels = {}  # bbox -> {label, count, timestamp, confidence, is_known, student_id}
         
         # Performance optimization
         self.frame_count = 0
         self.cached_faces = []
         self.cached_results = []
         self.last_recognition_time = 0
+        self.no_face_streak = 0
         
         # Threading for recognition (non-blocking)
-        self.recognition_queue = queue.Queue(maxsize=1)
-        self.result_queue = queue.Queue(maxsize=1)
+        self.recognition_queue = queue.Queue(maxsize=int(getattr(config, 'RECOGNITION_QUEUE_SIZE', 6)))
+        self.result_queue = queue.Queue(maxsize=int(getattr(config, 'RESULT_QUEUE_SIZE', 12)))
         self.recognition_thread = None
         self.running = True
         
@@ -112,6 +119,7 @@ class FaceRecognitionSystem:
         
         # DNN face detector (faster on GPU)
         self.dnn_net = None
+        self.dnn_on_cuda = False
         self._load_dnn_detector()
         
         # Start recognition thread
@@ -162,23 +170,33 @@ class FaceRecognitionSystem:
                         embedding,
                         self.known_faces,
                         threshold=getattr(config, 'FACE_RECOGNITION_THRESHOLD', 0.5),
-                        margin=0.15
+                        margin=getattr(config, 'FACE_MATCH_MARGIN', 0.20)
                     )
                     best_score = 0.0
                     if best_match is not None and best_match.get('face_embedding') is not None:
                         best_score = cosine_similarity(embedding, best_match['face_embedding'])
                     # Send result back
                     try:
-                        self.result_queue.get_nowait()  # Clear old
-                    except:
-                        pass
-                    self.result_queue.put({
-                        'student': best_match,
-                        'confidence': best_score,
-                        'bbox': bbox,
-                        'timestamp': timestamp,
-                        'face_crop': face_crop
-                    })
+                        self.result_queue.put_nowait({
+                            'student': best_match,
+                            'confidence': best_score,
+                            'bbox': bbox,
+                            'timestamp': timestamp,
+                            'face_crop': face_crop
+                        })
+                    except queue.Full:
+                        # Keep latest results while avoiding stale queue buildup.
+                        try:
+                            self.result_queue.get_nowait()
+                        except queue.Empty:
+                            pass
+                        self.result_queue.put_nowait({
+                            'student': best_match,
+                            'confidence': best_score,
+                            'bbox': bbox,
+                            'timestamp': timestamp,
+                            'face_crop': face_crop
+                        })
                     
                 except queue.Empty:
                     continue
@@ -188,6 +206,97 @@ class FaceRecognitionSystem:
         self.recognition_thread = threading.Thread(target=recognition_worker, daemon=True)
         self.recognition_thread.start()
         print("✓ Recognition thread started")
+
+    def _match_bbox_key(self, bbox: Tuple[int, int, int, int], candidates: List[Tuple[int, int, int, int]]) -> Optional[Tuple[int, int, int, int]]:
+        """Return nearest bbox key when current face is likely the same person."""
+        if not candidates:
+            return None
+
+        x1, y1, x2, y2 = bbox
+        center_x, center_y = (x1 + x2) / 2, (y1 + y2) / 2
+        face_size = max(1.0, ((x2 - x1) + (y2 - y1)) / 2)
+        max_factor = float(getattr(config, 'BBOX_MATCH_DISTANCE_FACTOR', 0.30))
+        max_distance = face_size * max_factor
+
+        best_key = None
+        min_distance = float('inf')
+        for key in candidates:
+            kx1, ky1, kx2, ky2 = key
+            key_center_x, key_center_y = (kx1 + kx2) / 2, (ky1 + ky2) / 2
+            distance = ((center_x - key_center_x) ** 2 + (center_y - key_center_y) ** 2) ** 0.5
+            if distance <= max_distance and distance < min_distance:
+                min_distance = distance
+                best_key = key
+
+        return best_key
+
+    def _cleanup_label_caches(self, current_time: datetime):
+        """Remove expired stable and pending labels."""
+        label_ttl_sec = float(getattr(config, 'RECOGNITION_LABEL_TTL_SEC', 1.5))
+        pending_ttl_sec = float(getattr(config, 'PENDING_LABEL_TTL_SEC', 1.5))
+
+        expired_stable = []
+        for bbox, info in self.current_recognized_faces.items():
+            if (current_time - info['timestamp']).total_seconds() > label_ttl_sec:
+                expired_stable.append(bbox)
+        for bbox in expired_stable:
+            del self.current_recognized_faces[bbox]
+
+        expired_pending = []
+        for bbox, info in self.pending_labels.items():
+            if (current_time - info['timestamp']).total_seconds() > pending_ttl_sec:
+                expired_pending.append(bbox)
+        for bbox in expired_pending:
+            del self.pending_labels[bbox]
+
+    def _update_stable_label(self, bbox: Tuple[int, int, int, int], student: Optional[dict], confidence: float, current_time: datetime):
+        """Use short frame confirmation before switching labels."""
+        display_threshold = float(
+            getattr(
+                config,
+                'DISPLAY_CONFIDENCE_THRESHOLD',
+                getattr(config, 'FACE_RECOGNITION_THRESHOLD', 0.40)
+            )
+        )
+
+        is_known = bool(student and confidence > display_threshold)
+        next_label = student['name'] if is_known else 'Unknown'
+        next_student_id = student['student_id'] if is_known else None
+
+        known_confirm = int(getattr(config, 'KNOWN_CONFIRM_FRAMES', 2))
+        unknown_confirm = int(getattr(config, 'UNKNOWN_CONFIRM_FRAMES', 3))
+        required = known_confirm if is_known else unknown_confirm
+
+        candidate_keys = list(self.pending_labels.keys()) + list(self.current_recognized_faces.keys())
+        matched_key = self._match_bbox_key(bbox, candidate_keys)
+        label_key = matched_key if matched_key is not None else bbox
+
+        pending = self.pending_labels.get(label_key)
+        if pending and pending['label'] == next_label:
+            pending['count'] += 1
+            pending['timestamp'] = current_time
+            pending['confidence'] = confidence
+            pending['is_known'] = is_known
+            pending['student_id'] = next_student_id
+        else:
+            pending = {
+                'label': next_label,
+                'count': 1,
+                'timestamp': current_time,
+                'confidence': confidence,
+                'is_known': is_known,
+                'student_id': next_student_id,
+            }
+            self.pending_labels[label_key] = pending
+
+        if pending['count'] >= required:
+            self.current_recognized_faces[label_key] = {
+                'name': pending['label'],
+                'student_id': pending['student_id'],
+                'confidence': pending['confidence'],
+                'timestamp': current_time,
+                'is_known': pending['is_known']
+            }
     
     def stop(self):
         """Stop the recognition thread"""
@@ -216,24 +325,43 @@ class FaceRecognitionSystem:
                 urllib.request.urlretrieve(prototxt_url, config_file)
             
             self.dnn_net = cv2.dnn.readNetFromCaffe(config_file, model_file)
+            build_info = ""
+            try:
+                build_info = cv2.getBuildInformation().lower()
+            except Exception:
+                build_info = ""
+
+            supports_dnn_cuda = (
+                hasattr(cv2.dnn, 'DNN_BACKEND_CUDA')
+                and hasattr(cv2.dnn, 'DNN_TARGET_CUDA')
+                and ('nvidia cuda' in build_info or 'cuda' in build_info)
+                and ('cudnn' in build_info)
+            )
             
             # Enable GPU if available
-            if self.use_gpu:
+            if self.use_gpu and supports_dnn_cuda:
                 try:
                     self.dnn_net.setPreferableBackend(cv2.dnn.DNN_BACKEND_CUDA)
                     self.dnn_net.setPreferableTarget(cv2.dnn.DNN_TARGET_CUDA)
+                    self.dnn_on_cuda = True
                     print("✓ DNN face detector loaded on GPU")
                 except:
                     self.dnn_net.setPreferableBackend(cv2.dnn.DNN_BACKEND_OPENCV)
                     self.dnn_net.setPreferableTarget(cv2.dnn.DNN_TARGET_CPU)
+                    self.dnn_on_cuda = False
                     print("✓ DNN face detector loaded on CPU")
             else:
                 self.dnn_net.setPreferableBackend(cv2.dnn.DNN_BACKEND_OPENCV)
                 self.dnn_net.setPreferableTarget(cv2.dnn.DNN_TARGET_CPU)
-                print("✓ DNN face detector loaded on CPU")
+                self.dnn_on_cuda = False
+                if self.use_gpu and not supports_dnn_cuda:
+                    print("✓ DNN face detector loaded on CPU (OpenCV DNN CUDA backend unavailable)")
+                else:
+                    print("✓ DNN face detector loaded on CPU")
         except Exception as e:
             print(f"  DNN detector load failed: {e}")
             self.dnn_net = None
+            self.dnn_on_cuda = False
     
     def _load_known_faces(self):
         """Load all known faces from database"""
@@ -389,6 +517,8 @@ class FaceRecognitionSystem:
         
         # Try GPU-accelerated DNN detector first
         use_dnn = getattr(config, 'USE_DNN_DETECTOR', False)
+        if use_dnn and not self.dnn_on_cuda and not getattr(config, 'ALLOW_CPU_DNN', False):
+            use_dnn = False
         if use_dnn and self.dnn_net is not None:
             try:
                 # Prepare blob for DNN
@@ -564,19 +694,25 @@ class FaceRecognitionSystem:
         current_time = datetime.now()
         h, w = frame.shape[:2]
         
-        # Clean up old recognized faces (older than 10 seconds)
-        expired_bboxes = []
-        for bbox, info in self.current_recognized_faces.items():
-            if (current_time - info['timestamp']).total_seconds() > 10:
-                expired_bboxes.append(bbox)
-        for bbox in expired_bboxes:
-            del self.current_recognized_faces[bbox]
+        # Clean up old recognized faces quickly to avoid wrong-name carryover.
+        self._cleanup_label_caches(current_time)
         
-        # STEP 1: Always detect faces (fast)
-        faces = self.detect_faces(frame)
+        # STEP 1: Detect faces every N frames and reuse cached boxes in-between.
+        detect_interval = max(1, int(getattr(config, 'DETECT_EVERY_N_FRAMES', 2)))
+        if self.frame_count % detect_interval == 0 or not self.cached_faces:
+            detected_faces = self.detect_faces(frame)
+            if detected_faces:
+                self.cached_faces = detected_faces
+                self.no_face_streak = 0
+            else:
+                self.no_face_streak += 1
+                hold_frames = int(getattr(config, 'NO_FACE_HOLD_FRAMES', 4))
+                if self.no_face_streak > hold_frames:
+                    self.cached_faces = []
+        faces = self.cached_faces
         
         # STEP 2: Queue enhanced crops for recognition
-        process_interval = 10
+        process_interval = max(1, int(getattr(config, 'PROCESS_EVERY_N_FRAMES', 10)))
         if self.frame_count % process_interval == 0 and faces:
             for (x1, y1, x2, y2) in faces:
                 # Crop face with padding
@@ -587,8 +723,11 @@ class FaceRecognitionSystem:
                 y2_p = min(h, y2 + pad)
                 face_crop = frame[y1_p:y2_p, x1_p:x2_p].copy()
                 
-                # Enhance face quality
-                face_enhanced = self.enhance_face(face_crop)
+                # Enhancement improves robustness but is expensive for low-FPS RTSP.
+                if getattr(config, 'ENHANCE_BEFORE_RECOGNITION', False):
+                    face_enhanced = self.enhance_face(face_crop)
+                else:
+                    face_enhanced = cv2.resize(face_crop, (160, 160), interpolation=cv2.INTER_LINEAR)
                 
                 # Queue for background recognition
                 try:
@@ -599,57 +738,55 @@ class FaceRecognitionSystem:
                         'original_crop': face_crop
                     })
                 except queue.Full:
-                    pass
+                    # Keep freshest samples by dropping oldest queued task.
+                    try:
+                        self.recognition_queue.get_nowait()
+                    except queue.Empty:
+                        pass
+                    try:
+                        self.recognition_queue.put_nowait({
+                            'face': face_enhanced,
+                            'bbox': (x1, y1, x2, y2),
+                            'timestamp': current_time,
+                            'original_crop': face_crop
+                        })
+                    except queue.Full:
+                        pass
         
         # STEP 3: Check for recognition results
-        try:
-            result = self.result_queue.get_nowait()
+        while True:
+            try:
+                result = self.result_queue.get_nowait()
+            except queue.Empty:
+                break
+
             student = result['student']
             confidence = result['confidence']
             timestamp = result['timestamp']
             face_crop = result['face_crop']
             bbox = result.get('bbox', None)
-            
-            # Store recognition result for display (with confidence threshold of 0.55)
-            display_threshold = 0.50
+
             if bbox:
-                if student and confidence > display_threshold:
-                    # High confidence - show name
-                    self.current_recognized_faces[bbox] = {
-                        'name': student['name'],
-                        'student_id': student['student_id'],
-                        'confidence': confidence,
-                        'timestamp': current_time,
-                        'is_known': True
-                    }
-                else:
-                    # Low confidence or no match - mark as unknown
-                    self.current_recognized_faces[bbox] = {
-                        'name': 'Unknown',
-                        'student_id': None,
-                        'confidence': confidence,
-                        'timestamp': current_time,
-                        'is_known': False
-                    }
-            
+                self._update_stable_label(bbox, student, confidence, current_time)
+
             # LOG only if confidence exceeds database threshold AND it's a known person
             if student and confidence > config.FACE_RECOGNITION_THRESHOLD:
                 student_id = student['student_id']
-                
+
                 # COOLDOWN CHECK (5 minutes)
                 should_log = True
                 if student_id in self.last_seen:
                     time_diff = (timestamp - self.last_seen[student_id]).total_seconds()
                     if time_diff < 300:  # 5 minutes
                         should_log = False
-                
+
                 if should_log:
                     # LOG with screenshot
                     screenshot_path = self.save_visit_screenshot(face_crop, student)
                     database.log_visit(
-                        student['id'], 
-                        student_id, 
-                        student['name'], 
+                        student['id'],
+                        student_id,
+                        student['name'],
                         screenshot_path=screenshot_path,
                         is_known=True
                     )
@@ -657,9 +794,6 @@ class FaceRecognitionSystem:
                     print(f"✓ LOGGED: {student['name']} at {timestamp.strftime('%H:%M:%S')}")
                 else:
                     print(f"  Cooldown: {student['name']} (seen recently)")
-        
-        except queue.Empty:
-            pass
         
         recognized_people: List[dict] = []
 
@@ -670,25 +804,14 @@ class FaceRecognitionSystem:
             color = (0, 0, 255)  # Red for unknown
             confidence = 0.0
             is_known = False
-            
-            # Check if this face matches a recognized face
-            best_match = None
-            min_distance = float('inf')
-            
-            for recognized_bbox, info in self.current_recognized_faces.items():
-                rx1, ry1, rx2, ry2 = recognized_bbox
-                # Calculate center distance
-                center_x, center_y = (x1 + x2) / 2, (y1 + y2) / 2
-                rcenter_x, rcenter_y = (rx1 + rx2) / 2, (ry1 + ry2) / 2
-                distance = ((center_x - rcenter_x) ** 2 + (center_y - rcenter_y) ** 2) ** 0.5
-                
-                # If within reasonable distance (face size), consider it a match
-                face_size = ((x2 - x1) + (y2 - y1)) / 2
-                if distance < face_size * 0.5 and distance < min_distance:
-                    min_distance = distance
-                    best_match = info
-            
-            if best_match:
+
+            matched_key = self._match_bbox_key((x1, y1, x2, y2), list(self.current_recognized_faces.keys()))
+            if matched_key is not None:
+                best_match = self.current_recognized_faces.get(matched_key)
+            else:
+                best_match = None
+
+            if best_match is not None:
                 name_to_display = best_match['name']
                 confidence = best_match['confidence']
                 is_known = best_match.get('is_known', False)
@@ -764,23 +887,38 @@ class FaceRecognitionSystem:
         x1, y1, x2, y2 = faces[0]
 
         h, w = frame.shape[:2]
-        pad = int((x2 - x1) * 0.35)
-        x1 = max(0, x1 - pad)
-        y1 = max(0, y1 - pad)
-        x2 = min(w, x2 + pad)
-        y2 = min(h, y2 + pad)
+        base_size = max(1, x2 - x1)
 
-        face_image = frame[y1:y2, x1:x2]
-        if face_image.size == 0:
-            return None, None
+        # Try a few crop paddings and both enhanced/raw variants to increase usable samples.
+        for pad_factor in (0.40, 0.30, 0.20):
+            pad = int(base_size * pad_factor)
+            cx1 = max(0, x1 - pad)
+            cy1 = max(0, y1 - pad)
+            cx2 = min(w, x2 + pad)
+            cy2 = min(h, y2 + pad)
 
-        # Enhance for consistency across lighting/angles
-        face_enhanced = self.enhance_face(face_image)
-        embedding = self.get_face_embedding(face_enhanced)
-        if embedding is None:
-            return None, None
+            face_image = frame[cy1:cy2, cx1:cx2]
+            if face_image.size == 0:
+                continue
 
-        return embedding, face_enhanced
+            # Tiny crops are often noisy and hurt embedding stability.
+            fh, fw = face_image.shape[:2]
+            min_size = int(getattr(config, 'REGISTRATION_MIN_FACE_SIZE', 70))
+            if min(fh, fw) < min_size:
+                continue
+
+            face_enhanced = self.enhance_face(face_image)
+            embedding = self.get_face_embedding(face_enhanced)
+            if embedding is not None:
+                return embedding, face_enhanced
+
+            # Fallback: try raw crop without heavy enhancement.
+            raw_resized = cv2.resize(face_image, (160, 160), interpolation=cv2.INTER_LINEAR)
+            embedding = self.get_face_embedding(raw_resized)
+            if embedding is not None:
+                return embedding, face_image
+
+        return None, None
 
     def register_student_from_frames(self, frames: List[np.ndarray], student_id: str, name: str,
                                      department: str, year: int) -> bool:
@@ -813,6 +951,12 @@ class FaceRecognitionSystem:
 
         if not embeddings:
             print("  ✗ No valid samples captured. Registration aborted.")
+            return False
+
+        min_valid = int(getattr(config, 'MIN_VALID_REGISTRATION_SAMPLES', 12))
+        if len(embeddings) < min_valid:
+            print(f"  ✗ Only {len(embeddings)} valid samples (minimum required: {min_valid}).")
+            print("  ✗ Registration aborted. Please recapture with better lighting and steady face alignment.")
             return False
 
         # Average embeddings for robustness

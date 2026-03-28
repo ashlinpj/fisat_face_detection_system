@@ -152,10 +152,6 @@ let poseIndex = 0;
 let captureStudentData = {};
 
 $("#btn-register-capture").addEventListener("click", () => {
-  if (!detectionRunning) {
-    toast("Start detection first!");
-    return;
-  }
   // Reset phases
   $("#capture-phase-info").hidden = false;
   $("#capture-phase-poses").hidden = true;
