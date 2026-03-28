@@ -487,20 +487,165 @@ class FaceRecognitionSystem:
         face_path = os.path.join(config.FACES_DIR, face_filename)
         cv2.imwrite(face_path, face_enhanced, [cv2.IMWRITE_JPEG_QUALITY, 95])
 
+        # Store as single-item gallery for consistency with gallery matching
+        multi_embeddings = [embedding]
+
         # Check if updating or adding
         existing = database.get_student_by_id(student_id)
         if existing:
             success = database.update_student(
                 student_id=student_id, name=name, department=department,
-                year=year, face_embedding=embedding, face_image_path=face_path
+                year=year, face_embedding=embedding, face_image_path=face_path,
+                face_embeddings_multi=multi_embeddings
             )
             print(f"✓ Updated: {name} (from image upload)")
         else:
             success = database.add_student(
                 student_id=student_id, name=name, department=department,
-                year=year, face_embedding=embedding, face_image_path=face_path
+                year=year, face_embedding=embedding, face_image_path=face_path,
+                face_embeddings_multi=multi_embeddings
             )
             print(f"✓ Added: {name} (from image upload)")
+        
+        if success:
+            self.reload_known_faces()
+        
+        return success
+
+    def register_from_images(self, image_paths: List[str], student_id: str,
+                             name: str, department: str, year: int,
+                             progress_callback=None) -> bool:
+        """
+        Register student from multiple high-resolution image files.
+        Each image is processed for face detection, enhancement, and embedding.
+        All embeddings are stored as a gallery for gallery-based matching.
+        
+        Args:
+            image_paths: List of image file paths
+            progress_callback: Optional callable(current, total, status_text)
+        """
+        print(f"\nRegistering from {len(image_paths)} images: {name} ({student_id})")
+        
+        embeddings = []
+        saved_paths = []
+        failed_images = []
+        
+        database.ensure_directories()
+        student_dir = os.path.join(config.FACES_DIR, student_id)
+        os.makedirs(student_dir, exist_ok=True)
+        
+        for idx, image_path in enumerate(image_paths, start=1):
+            if progress_callback:
+                progress_callback(idx, len(image_paths), f"Processing image {idx}/{len(image_paths)}...")
+            
+            image = cv2.imread(image_path)
+            if image is None:
+                print(f"  ✗ Image {idx}: Could not load {os.path.basename(image_path)}")
+                failed_images.append(os.path.basename(image_path))
+                continue
+            
+            # Detect face
+            faces = self.detect_faces(image)
+            if not faces:
+                try:
+                    detected = DeepFace.extract_faces(
+                        image,
+                        detector_backend='opencv',
+                        enforce_detection=False,
+                        align=True
+                    )
+                    for d in detected:
+                        if d.get('confidence', 0) > 0.5:
+                            fa = d['facial_area']
+                            faces.append((fa['x'], fa['y'], fa['x']+fa['w'], fa['y']+fa['h']))
+                except Exception:
+                    pass
+            
+            if not faces:
+                print(f"  ✗ Image {idx}: No face detected in {os.path.basename(image_path)}")
+                failed_images.append(os.path.basename(image_path))
+                continue
+            
+            # Use largest face
+            if len(faces) > 1:
+                faces = sorted(faces, key=lambda f: (f[2]-f[0])*(f[3]-f[1]), reverse=True)
+            
+            x1, y1, x2, y2 = faces[0]
+            h, w = image.shape[:2]
+            pad = int((x2 - x1) * 0.25)
+            x1, y1 = max(0, x1 - pad), max(0, y1 - pad)
+            x2, y2 = min(w, x2 + pad), min(h, y2 + pad)
+            face_crop = image[y1:y2, x1:x2]
+            
+            if face_crop.size == 0:
+                print(f"  ✗ Image {idx}: Empty face crop")
+                failed_images.append(os.path.basename(image_path))
+                continue
+            
+            # Enhance and get embedding
+            face_enhanced = self.enhance_face(face_crop)
+            embedding = self.get_face_embedding(face_enhanced)
+            
+            if embedding is None:
+                # Try raw resize fallback
+                raw_resized = cv2.resize(face_crop, (160, 160), interpolation=cv2.INTER_LANCZOS4)
+                embedding = self.get_face_embedding(raw_resized)
+            
+            if embedding is None:
+                print(f"  ✗ Image {idx}: Embedding extraction failed for {os.path.basename(image_path)}")
+                failed_images.append(os.path.basename(image_path))
+                continue
+            
+            embeddings.append(embedding)
+            
+            # Save face image
+            face_filename = f"{student_id}_{datetime.now().strftime('%Y%m%d_%H%M%S')}_img{idx}.jpg"
+            face_path = os.path.join(student_dir, face_filename)
+            cv2.imwrite(face_path, face_enhanced, [cv2.IMWRITE_JPEG_QUALITY, 95])
+            saved_paths.append(face_path)
+            
+            print(f"  ✓ Image {idx}: {os.path.basename(image_path)} → embedding OK")
+        
+        if progress_callback:
+            progress_callback(len(image_paths), len(image_paths), "Finalizing registration...")
+        
+        if not embeddings:
+            print(f"  ✗ No valid embeddings from any of {len(image_paths)} images!")
+            return False
+        
+        print(f"\n  Summary: {len(embeddings)}/{len(image_paths)} images produced valid embeddings")
+        if failed_images:
+            print(f"  Failed: {', '.join(failed_images[:10])}" +
+                  (f" ... and {len(failed_images)-10} more" if len(failed_images) > 10 else ""))
+        
+        # Store all individual embeddings as gallery
+        multi_embeddings = [e.copy() for e in embeddings]
+        
+        # Average embedding for backward-compatible single-vector matching
+        final_embedding = np.mean(np.stack(embeddings), axis=0)
+        norm = np.linalg.norm(final_embedding)
+        if norm > 0:
+            final_embedding = final_embedding / norm
+        
+        primary_image_path = saved_paths[0] if saved_paths else None
+        
+        existing = database.get_student_by_id(student_id)
+        if existing:
+            success = database.update_student(
+                student_id=student_id, name=name, department=department,
+                year=year, face_embedding=final_embedding,
+                face_image_path=primary_image_path,
+                face_embeddings_multi=multi_embeddings
+            )
+            print(f"  ✓ Updated: {name} with {len(embeddings)} image embeddings (gallery: {len(multi_embeddings)})")
+        else:
+            success = database.add_student(
+                student_id=student_id, name=name, department=department,
+                year=year, face_embedding=final_embedding,
+                face_image_path=primary_image_path,
+                face_embeddings_multi=multi_embeddings
+            )
+            print(f"  ✓ Added: {name} with {len(embeddings)} image embeddings (gallery: {len(multi_embeddings)})")
         
         if success:
             self.reload_known_faces()
@@ -606,7 +751,7 @@ class FaceRecognitionSystem:
     
     def get_face_embedding(self, face_image: np.ndarray) -> Optional[np.ndarray]:
         """
-        Get face embedding using DeepFace - optimized
+        Get face embedding using DeepFace - L2-normalized for reliable cosine similarity
         """
         try:
             if face_image.shape[0] < 30 or face_image.shape[1] < 30:
@@ -624,7 +769,12 @@ class FaceRecognitionSystem:
             )
             
             if embedding:
-                return np.array(embedding[0]['embedding'])
+                emb = np.array(embedding[0]['embedding'], dtype=np.float64)
+                # L2-normalize so cosine similarity == dot product
+                norm = np.linalg.norm(emb)
+                if norm > 0:
+                    emb = emb / norm
+                return emb
         except Exception as e:
             pass
         
@@ -860,6 +1010,7 @@ class FaceRecognitionSystem:
     def _extract_face_sample(self, frame: np.ndarray) -> Tuple[Optional[np.ndarray], Optional[np.ndarray]]:
         """Detect, crop, enhance, and embed a single face from a frame."""
         if frame is None:
+            print("      → frame is None")
             return None, None
 
         faces = self.detect_faces(frame)
@@ -880,16 +1031,20 @@ class FaceRecognitionSystem:
                 pass
 
         if not faces:
+            print("      → no face detected in frame")
             return None, None
 
         # Use largest face
         faces = sorted(faces, key=lambda f: (f[2]-f[0])*(f[3]-f[1]), reverse=True)
         x1, y1, x2, y2 = faces[0]
+        face_w, face_h = x2 - x1, y2 - y1
 
         h, w = frame.shape[:2]
-        base_size = max(1, x2 - x1)
+        base_size = max(1, face_w)
 
         # Try a few crop paddings and both enhanced/raw variants to increase usable samples.
+        best_crop = None
+        best_crop_size = 0
         for pad_factor in (0.40, 0.30, 0.20):
             pad = int(base_size * pad_factor)
             cx1 = max(0, x1 - pad)
@@ -901,9 +1056,14 @@ class FaceRecognitionSystem:
             if face_image.size == 0:
                 continue
 
-            # Tiny crops are often noisy and hurt embedding stability.
             fh, fw = face_image.shape[:2]
             min_size = int(getattr(config, 'REGISTRATION_MIN_FACE_SIZE', 70))
+
+            # Track best crop even if below min_size for last-resort fallback
+            if min(fh, fw) > best_crop_size:
+                best_crop = face_image.copy()
+                best_crop_size = min(fh, fw)
+
             if min(fh, fw) < min_size:
                 continue
 
@@ -918,6 +1078,15 @@ class FaceRecognitionSystem:
             if embedding is not None:
                 return embedding, face_image
 
+        # Last resort: if we have any crop at all, upscale it and try embedding
+        if best_crop is not None and best_crop.size > 0:
+            upscaled = cv2.resize(best_crop, (160, 160), interpolation=cv2.INTER_LANCZOS4)
+            embedding = self.get_face_embedding(upscaled)
+            if embedding is not None:
+                print(f"      → used upscaled crop ({best_crop_size}px face)")
+                return embedding, best_crop
+
+        print(f"      → face detected ({face_w}x{face_h}px) but embedding extraction failed")
         return None, None
 
     def register_student_from_frames(self, frames: List[np.ndarray], student_id: str, name: str,
@@ -959,7 +1128,10 @@ class FaceRecognitionSystem:
             print("  ✗ Registration aborted. Please recapture with better lighting and steady face alignment.")
             return False
 
-        # Average embeddings for robustness
+        # Keep individual embeddings for gallery-based matching
+        multi_embeddings = [e.copy() for e in embeddings]
+
+        # Average embeddings for backward-compatible single-vector matching
         final_embedding = np.mean(np.stack(embeddings), axis=0)
         norm = np.linalg.norm(final_embedding)
         if norm > 0:
@@ -975,9 +1147,10 @@ class FaceRecognitionSystem:
                 department=department,
                 year=year,
                 face_embedding=final_embedding,
-                face_image_path=primary_image_path
+                face_image_path=primary_image_path,
+                face_embeddings_multi=multi_embeddings
             )
-            print(f"  ✓ Updated: {name} with {len(embeddings)} samples")
+            print(f"  ✓ Updated: {name} with {len(embeddings)} samples (gallery: {len(multi_embeddings)} embeddings)")
         else:
             success = database.add_student(
                 student_id=student_id,
@@ -985,9 +1158,10 @@ class FaceRecognitionSystem:
                 department=department,
                 year=year,
                 face_embedding=final_embedding,
-                face_image_path=primary_image_path
+                face_image_path=primary_image_path,
+                face_embeddings_multi=multi_embeddings
             )
-            print(f"  ✓ Added: {name} with {len(embeddings)} samples")
+            print(f"  ✓ Added: {name} with {len(embeddings)} samples (gallery: {len(multi_embeddings)} embeddings)")
 
         if success:
             self.reload_known_faces()

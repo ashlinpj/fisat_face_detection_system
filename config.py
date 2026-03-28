@@ -1,4 +1,4 @@
-﻿# Configuration file for Face Detection System
+# Configuration file for Face Detection System
 
 import os
 
@@ -16,15 +16,20 @@ YOLO_MODEL = "yolov8n.pt"  # General model, works well
 CONFIDENCE_THRESHOLD = 0.4
 
 # Face Recognition settings
-FACE_RECOGNITION_THRESHOLD = 0.36  # Slightly more lenient to reduce false Unknown for registered users
-FACE_MATCH_MARGIN = 0.08  # Lower margin reduces missed matches when look/pose changes quickly
-DISPLAY_CONFIDENCE_THRESHOLD = 0.34  # Show recognized names with moderate confidence
-FACE_EMBEDDING_MODEL = "Facenet"  # Facenet is faster and good for variations
+FACE_RECOGNITION_THRESHOLD = 0.60  # Higher threshold for Facenet512's stronger embeddings
+FACE_MATCH_MARGIN = 0.10  # Tighter margin improves discrimination between similar faces
+DISPLAY_CONFIDENCE_THRESHOLD = 0.40  # Show recognized names with moderate confidence
+FACE_EMBEDDING_MODEL = "Facenet512"  # 512-dim embeddings: 4x more discriminative than Facenet-128
 
-# Performance settings - RTSP optimized
-PROCESS_EVERY_N_FRAMES = 6  # Recognize more frequently to avoid stale Unknown/no-person flips
-GUI_PROCESS_EVERY_N_FRAMES = 4  # Keep GUI recognition updates responsive
-GUI_RECOGNITION_INTERVAL_SEC = 0.25  # Faster recognition refresh for stable identity display
+# Multi-embedding gallery matching (uses all registration samples, not just average)
+FACE_MULTI_SAMPLE_MATCH = True  # Enable gallery-based matching for better accuracy
+FACE_GALLERY_TOP_K = 5  # Average top-K gallery hits for robust scoring
+FACE_ADAPTIVE_MARGIN = True  # Scale margin up when top-2 candidates are close
+
+# Performance settings - RTSP optimized for LOW LATENCY recognition
+PROCESS_EVERY_N_FRAMES = 2  # Queue faces for recognition every 2nd frame (was 6)
+GUI_PROCESS_EVERY_N_FRAMES = 2  # GUI triggers process_frame every 2nd frame (was 4)
+GUI_RECOGNITION_INTERVAL_SEC = 0.10  # 100ms recognition refresh (was 250ms)
 GUI_UI_TARGET_FPS = 30  # Stable UI target to reduce event-loop pressure
 GUI_PREVIEW_WIDTH = 640  # Smaller preview improves rendering FPS
 DETECT_EVERY_N_FRAMES = 1  # Detect every frame for stable person presence
@@ -32,9 +37,9 @@ ENHANCE_BEFORE_RECOGNITION = False  # Disable expensive enhancement for faster R
 DETECTION_SCALE = 0.6  # Used by Haar fallback; lower is faster
 NO_FACE_HOLD_FRAMES = 8  # Keep last detected boxes briefly when a few frames miss detection
 BBOX_MATCH_DISTANCE_FACTOR = 0.30  # Tighter bbox association to avoid cross-person name swaps
-RECOGNITION_LABEL_TTL_SEC = 1.5  # Expire stale labels quickly to prevent wrong carryover
+RECOGNITION_LABEL_TTL_SEC = 3.0  # Keep labels visible longer to avoid flicker (was 1.5)
 PENDING_LABEL_TTL_SEC = 1.5  # Pending candidate labels expire quickly when face leaves
-KNOWN_CONFIRM_FRAMES = 2  # Require short consistency before showing a known identity
+KNOWN_CONFIRM_FRAMES = 1  # Show name on first match — Facenet512+gallery is accurate enough (was 2)
 UNKNOWN_CONFIRM_FRAMES = 3  # Require a bit more consistency before switching to Unknown
 RECOGNITION_QUEUE_SIZE = 6  # Allow multiple faces per cycle instead of single-face bottleneck
 RESULT_QUEUE_SIZE = 12  # Keep several recognition results to avoid drops during bursts
@@ -96,20 +101,23 @@ RTSP_RESTART_INTERVAL = 0  # Seconds; restart capture periodically to clear mosa
 # Format: key:value will be converted to "key;value" joined by "|"
 RTSP_OPENCV_OPTIONS = {
 	"rtsp_transport": RTSP_TRANSPORT,
-	"fflags": "nobuffer+discardcorrupt",
+	"fflags": "nobuffer+discardcorrupt+flush_packets",
 	"flags": "low_delay",
 	"avioflags": "direct",
 	"probesize": "32",
 	"analyzeduration": "0",
-	"max_delay": "100000",      # microseconds; keep very low for near-real-time
-	"buffer_size": "102400",    # bytes; small to keep latency low
-	"stimeout": "3000000",      # microseconds to wait for packets (avoid transient timeout churn)
-	"reorder_queue_size": "0",  # disable frame reordering to reduce lag
+	"max_delay": "0",             # zero delay — always prefer latest packet
+	"buffer_size": "65536",       # smaller buffer = less latency
+	"stimeout": "2000000",        # 2s timeout for faster frozen-frame detection
+	"reorder_queue_size": "0",    # disable frame reordering to reduce lag
+	"framedrop": "1",             # drop frames when behind
 }
 
 # Number of grab() calls before each read() to skip queued frames when processing lags
-RTSP_PREGRAB_COUNT = 1
+RTSP_PREGRAB_COUNT = 2  # Grab 2 stale frames before reading fresh one (was 1)
 RTSP_USE_HW_ACCEL = True  # Ask OpenCV/FFmpeg to use hardware decode when available
+RTSP_FROZEN_THRESHOLD_SEC = 2.0  # Auto-reconnect if no frame arrives for this duration
+RTSP_AUTO_RECONNECT = True  # Enable automatic RTSP reconnection on frozen stream
 
 # Registration-mode low-latency controls
 REGISTRATION_PREGRAB_COUNT = 4  # Moderate drain during registration for current-frame capture
@@ -129,6 +137,9 @@ WINDOW_TITLE = "College Canteen Face Detection System"
 
 # Time settings
 MIN_TIME_BETWEEN_LOGS = 30  # Minimum seconds between logging same person
+
+
+
 
 
 

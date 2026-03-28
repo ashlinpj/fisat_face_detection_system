@@ -1,4 +1,4 @@
-﻿# Configuration file for Face Detection System
+# Configuration file for Face Detection System
 
 import os
 
@@ -16,14 +16,15 @@ YOLO_MODEL = "yolov8n.pt"  # General model, works well
 CONFIDENCE_THRESHOLD = 0.4
 
 # Face Recognition settings
-FACE_RECOGNITION_THRESHOLD = 0.46  # Stricter threshold reduces wrong known-person matches
-FACE_MATCH_MARGIN = 0.14  # Require clearer separation from second-best candidate
-DISPLAY_CONFIDENCE_THRESHOLD = 0.45  # Show name only when confidence is safely high
-LOG_KNOWN_CONFIDENCE_THRESHOLD = 0.58  # Log only very confident known matches
-LOG_KNOWN_CONFIRM_HITS = 4  # Require repeated high-confidence hits before logging
-LOG_KNOWN_HIT_WINDOW_SEC = 2.0  # Hits must arrive within this window to count together
-PROFILE_SAMPLE_LIMIT = 24  # Max recent face samples per student used for matching
-FACE_EMBEDDING_MODEL = "Facenet"  # Facenet is faster and good for variations
+FACE_RECOGNITION_THRESHOLD = 0.60  # Higher threshold for Facenet512's stronger embeddings
+FACE_MATCH_MARGIN = 0.10  # Tighter margin improves discrimination between similar faces
+DISPLAY_CONFIDENCE_THRESHOLD = 0.40  # Show recognized names with moderate confidence
+FACE_EMBEDDING_MODEL = "Facenet512"  # 512-dim embeddings: 4x more discriminative than Facenet-128
+
+# Multi-embedding gallery matching (uses all registration samples, not just average)
+FACE_MULTI_SAMPLE_MATCH = True  # Enable gallery-based matching for better accuracy
+FACE_GALLERY_TOP_K = 5  # Average top-K gallery hits for robust scoring
+FACE_ADAPTIVE_MARGIN = True  # Scale margin up when top-2 candidates are close
 
 # Performance settings - RTSP optimized
 PROCESS_EVERY_N_FRAMES = 6  # Recognize more frequently to avoid stale Unknown/no-person flips
@@ -33,23 +34,23 @@ GUI_UI_TARGET_FPS = 30  # Stable UI target to reduce event-loop pressure
 GUI_PREVIEW_WIDTH = 640  # Smaller preview improves rendering FPS
 DETECT_EVERY_N_FRAMES = 1  # Detect every frame for stable person presence
 ENHANCE_BEFORE_RECOGNITION = False  # Disable expensive enhancement for faster RTSP performance
-DETECTION_SCALE = 0.75  # Slightly larger fallback input improves face recall on RTSP frames
+DETECTION_SCALE = 0.6  # Used by Haar fallback; lower is faster
 NO_FACE_HOLD_FRAMES = 8  # Keep last detected boxes briefly when a few frames miss detection
 BBOX_MATCH_DISTANCE_FACTOR = 0.30  # Tighter bbox association to avoid cross-person name swaps
 RECOGNITION_LABEL_TTL_SEC = 1.5  # Expire stale labels quickly to prevent wrong carryover
 PENDING_LABEL_TTL_SEC = 1.5  # Pending candidate labels expire quickly when face leaves
-KNOWN_CONFIRM_FRAMES = 3  # Extra confirmation lowers quick label swaps between similar faces
+KNOWN_CONFIRM_FRAMES = 2  # Require short consistency before showing a known identity
 UNKNOWN_CONFIRM_FRAMES = 3  # Require a bit more consistency before switching to Unknown
 RECOGNITION_QUEUE_SIZE = 6  # Allow multiple faces per cycle instead of single-face bottleneck
 RESULT_QUEUE_SIZE = 12  # Keep several recognition results to avoid drops during bursts
 USE_GPU = True  # Enable GPU acceleration
 USE_THREADED_RECOGNITION = True  # Run recognition in background thread
 USE_DNN_DETECTOR = True  # Use GPU-accelerated DNN detector when CUDA backend is available
-ALLOW_CPU_DNN = True  # Allow CPU DNN when CUDA DNN path is unavailable for better detection reliability
-DNN_CONFIDENCE_THRESHOLD = 0.30  # More sensitive detection to recover missed faces
+ALLOW_CPU_DNN = False  # Keep False for FPS; CPU DNN is usually slower than Haar fallback
+DNN_CONFIDENCE_THRESHOLD = 0.45  # Slightly lower to reduce intermittent no-face misses
 
 # UI / logging controls
-SHOW_WINDOW = True  # Show live camera feed with annotations in detection window
+SHOW_WINDOW = False  # Names-only detection display (no live video feed)
 LOG_RECOGNITIONS = True  # Print detected faces to console
 VERBOSE_RTSP_LOGS = False  # Set True to see dropped-frame warnings
 
@@ -133,6 +134,9 @@ WINDOW_TITLE = "College Canteen Face Detection System"
 
 # Time settings
 MIN_TIME_BETWEEN_LOGS = 30  # Minimum seconds between logging same person
+
+
+
 
 
 

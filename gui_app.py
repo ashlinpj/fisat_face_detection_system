@@ -188,6 +188,14 @@ class CanteenFaceDetectionGUI:
             command=self.open_registration_dialog
         )
         self.register_btn.pack(side=tk.LEFT, padx=5)
+
+        self.register_photos_btn = ttk.Button(
+            control_frame,
+            text="📁 Register from Photos",
+            style='Big.TButton',
+            command=self.open_photo_registration_dialog
+        )
+        self.register_photos_btn.pack(side=tk.LEFT, padx=5)
         
         screenshot_btn = ttk.Button(
             control_frame,
@@ -479,19 +487,28 @@ class CanteenFaceDetectionGUI:
         self.video_label.config(image='', text="Camera stopped")
 
     def _start_capture_thread(self):
-        """Continuously grab frames and keep only the freshest one."""
+        """Continuously grab frames and keep only the freshest one.
+        
+        Detects frozen/stuck frames and triggers auto-reconnect.
+        Always drains the RTSP buffer aggressively to stay near real-time.
+        """
         self._stop_capture_thread()
         self.capture_thread_running = True
 
         def capture_loop():
+            frozen_threshold = float(getattr(config, 'RTSP_FROZEN_THRESHOLD_SEC', 2.0))
+            last_good_frame_time = time.time()
+            consecutive_failures = 0
+            max_consecutive_failures = 15  # trigger reconnect after this many
+
             while self.capture_thread_running and self.cap:
                 try:
                     frame = None
 
                     if config.USE_RTSP:
-                        drain_count = int(getattr(config, 'RTSP_PREGRAB_COUNT', 0))
+                        drain_count = int(getattr(config, 'RTSP_PREGRAB_COUNT', 2))
                         if getattr(config, 'REALTIME_ONLY_MODE', False):
-                            drain_count = max(drain_count, 1)
+                            drain_count = max(drain_count, 2)
                         if self.registration_mode:
                             drain_count = max(
                                 drain_count,
@@ -504,11 +521,12 @@ class CanteenFaceDetectionGUI:
 
                         for _ in range(read_burst):
                             with self.cap_lock:
+                                # Drain queued frames aggressively
                                 for __ in range(max(0, drain_count)):
                                     self.cap.grab()
                                 ret, fresh = self.cap.read()
-                                if ret:
-                                    frame = fresh
+                            if ret and fresh is not None:
+                                frame = fresh
                     else:
                         with self.cap_lock:
                             ret, fresh = self.cap.read()
@@ -516,8 +534,37 @@ class CanteenFaceDetectionGUI:
                             frame = fresh
 
                     if frame is None:
-                        time.sleep(0.01)
+                        consecutive_failures += 1
+                        now = time.time()
+
+                        # Auto-reconnect if stream appears frozen
+                        if config.USE_RTSP and (
+                            consecutive_failures >= max_consecutive_failures
+                            or (now - last_good_frame_time) > frozen_threshold
+                        ):
+                            print(f"⚠ RTSP frozen for {now - last_good_frame_time:.1f}s — reconnecting...")
+                            try:
+                                with self.cap_lock:
+                                    if self.cap:
+                                        self.cap.release()
+                                    self.cap = cv2.VideoCapture(config.RTSP_URL, cv2.CAP_FFMPEG)
+                                    self.cap.set(cv2.CAP_PROP_BUFFERSIZE, config.RTSP_BUFFER_SIZE)
+                                    self.cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*'H264'))
+                                    if config.RTSP_TARGET_FPS:
+                                        self.cap.set(cv2.CAP_PROP_FPS, config.RTSP_TARGET_FPS)
+                                consecutive_failures = 0
+                                last_good_frame_time = time.time()
+                            except Exception as e:
+                                print(f"  Reconnect error: {e}")
+                                time.sleep(1.0)
+                            continue
+
+                        time.sleep(0.005)  # Brief sleep, recover quickly
                         continue
+
+                    # Got a good frame
+                    consecutive_failures = 0
+                    last_good_frame_time = time.time()
 
                     with self.latest_frame_lock:
                         self.latest_frame = frame
@@ -623,14 +670,36 @@ class CanteenFaceDetectionGUI:
         last_annotated_frame = None
         last_recognized_people = []
         skipped_recognition_frames = 0
+        last_processed_frame_ts = 0.0
         
         while self.is_running:
+            # Always get the latest frame for display
             frame = self._get_latest_frame()
+            
+            # Track whether this is a genuinely new frame for recognition
+            is_new_frame = False
+            with self.latest_frame_lock:
+                current_ts = self.last_frame_ts
+            if current_ts != last_processed_frame_ts and current_ts > 0:
+                is_new_frame = True
+                last_processed_frame_ts = current_ts
+
             if frame is None:
                 if self.registration_mode:
-                    # Capture thread may be paused during direct registration preview.
                     time.sleep(0.01)
                     continue
+
+                now_check = time.time()
+                # Detect frozen stream and auto-reconnect
+                if config.USE_RTSP and last_processed_frame_ts > 0 and (now_check - last_processed_frame_ts) > 3.0:
+                    self.root.after(0, lambda: self.update_status("🟡 Stream stalled — reconnecting...", "orange"))
+                    opened = self._reopen_rtsp_capture()
+                    last_processed_frame_ts = 0.0
+                    failed_reads = 0
+                    if opened:
+                        self.root.after(0, lambda: self.update_status("🟢 RTSP Reconnected", "green"))
+                    continue
+
                 failed_reads += 1
                 
                 # Try to reconnect RTSP stream
@@ -649,7 +718,7 @@ class CanteenFaceDetectionGUI:
                 elif failed_reads >= max_failed_reads:
                     break
                 
-                time.sleep(0.1)
+                time.sleep(0.005)
                 continue
             
             failed_reads = 0
@@ -670,9 +739,12 @@ class CanteenFaceDetectionGUI:
             else:
                 skipped_recognition_frames += 1
                 should_recognize = (
-                    last_annotated_frame is None
-                    or skipped_recognition_frames >= process_interval
-                    or now >= next_recognition_at
+                    is_new_frame
+                    and (
+                        last_annotated_frame is None
+                        or skipped_recognition_frames >= process_interval
+                        or now >= next_recognition_at
+                    )
                 )
 
                 if should_recognize:
@@ -957,6 +1029,141 @@ class CanteenFaceDetectionGUI:
                     self.update_status("🟢 System Ready", "green")
         
         ttk.Button(dialog, text="📷 Capture & Register", command=do_register).pack(pady=20)
+
+    def open_photo_registration_dialog(self):
+        """Open dialog to register a student from multiple photo files."""
+        if self.face_system is None:
+            messagebox.showerror("Error", "System not initialized yet!")
+            return
+
+        dialog = tk.Toplevel(self.root)
+        dialog.title("Register from Photos")
+        dialog.geometry("500x550")
+        dialog.transient(self.root)
+        dialog.grab_set()
+
+        # Form fields
+        ttk.Label(dialog, text="Student ID:", font=('Segoe UI', 10)).pack(pady=(15, 2))
+        id_entry = ttk.Entry(dialog, width=35)
+        id_entry.pack()
+
+        ttk.Label(dialog, text="Name:", font=('Segoe UI', 10)).pack(pady=(8, 2))
+        name_entry = ttk.Entry(dialog, width=35)
+        name_entry.pack()
+
+        ttk.Label(dialog, text="Department:", font=('Segoe UI', 10)).pack(pady=(8, 2))
+        dept_entry = ttk.Entry(dialog, width=35)
+        dept_entry.pack()
+
+        ttk.Label(dialog, text="Year (1-4):", font=('Segoe UI', 10)).pack(pady=(8, 2))
+        year_var = tk.StringVar(value="1")
+        year_combo = ttk.Combobox(dialog, textvariable=year_var, values=['1', '2', '3', '4'], width=32)
+        year_combo.pack()
+
+        # Photo selection
+        ttk.Separator(dialog, orient='horizontal').pack(fill='x', pady=15)
+
+        selected_files = {'paths': []}
+        file_count_var = tk.StringVar(value="No photos selected")
+
+        def select_photos():
+            paths = filedialog.askopenfilenames(
+                title="Select face photos (different angles & poses)",
+                filetypes=[
+                    ("Image files", "*.jpg *.jpeg *.png *.bmp *.webp"),
+                    ("JPEG", "*.jpg *.jpeg"),
+                    ("PNG", "*.png"),
+                    ("All files", "*.*")
+                ]
+            )
+            if paths:
+                selected_files['paths'] = list(paths)
+                file_count_var.set(f"✓ {len(paths)} photos selected")
+                register_btn.config(state='normal')
+
+        ttk.Button(
+            dialog, text="📁 Select Photos...", command=select_photos
+        ).pack(pady=(0, 5))
+
+        ttk.Label(dialog, textvariable=file_count_var, font=('Segoe UI', 10, 'bold')).pack()
+
+        ttk.Label(
+            dialog,
+            text="Tip: Select 20-30+ photos from different angles, poses,\n"
+                 "and lighting conditions for best accuracy.",
+            wraplength=420,
+            justify='center',
+            foreground='gray'
+        ).pack(pady=(5, 10))
+
+        # Progress
+        progress_var = tk.DoubleVar(value=0)
+        progress_bar = ttk.Progressbar(dialog, variable=progress_var, maximum=100, length=400)
+        progress_bar.pack(pady=(5, 2))
+        progress_text_var = tk.StringVar(value="")
+        ttk.Label(dialog, textvariable=progress_text_var).pack()
+
+        def do_photo_register():
+            student_id = id_entry.get().strip()
+            name = name_entry.get().strip()
+            department = dept_entry.get().strip()
+            year = int(year_var.get())
+
+            if not student_id or not name:
+                messagebox.showerror("Error", "Student ID and Name are required!")
+                return
+
+            if not selected_files['paths']:
+                messagebox.showerror("Error", "Please select photos first!")
+                return
+
+            register_btn.config(state='disabled')
+            select_btn_ref.config(state='disabled')
+
+            def process_in_thread():
+                def progress_cb(current, total, text):
+                    pct = (current / total) * 100
+                    dialog.after(0, lambda: progress_var.set(pct))
+                    dialog.after(0, lambda: progress_text_var.set(text))
+
+                success = self.face_system.register_from_images(
+                    selected_files['paths'],
+                    student_id, name, department, year,
+                    progress_callback=progress_cb
+                )
+
+                def on_complete():
+                    if success:
+                        messagebox.showinfo(
+                            "Success",
+                            f"Student {name} registered with {len(selected_files['paths'])} photos!\n\n"
+                            f"Gallery-based matching is now active for this student."
+                        )
+                        dialog.destroy()
+                        self.refresh_students()
+                    else:
+                        messagebox.showerror(
+                            "Error",
+                            "Registration failed. Please check:\n"
+                            "• Photos contain clearly visible faces\n"
+                            "• Only one person per photo\n"
+                            "• Images are not corrupted"
+                        )
+                        register_btn.config(state='normal')
+                        select_btn_ref.config(state='normal')
+
+                dialog.after(0, on_complete)
+
+            threading.Thread(target=process_in_thread, daemon=True).start()
+
+        btn_frame = ttk.Frame(dialog)
+        btn_frame.pack(pady=15)
+        select_btn_ref = ttk.Button(btn_frame, text="📁 Select Photos...", command=select_photos)
+        register_btn = ttk.Button(
+            btn_frame, text="✓ Register from Selected Photos",
+            command=do_photo_register, state='disabled'
+        )
+        register_btn.pack(side=tk.LEFT, padx=5)
 
     def get_pose_script(self, include_glasses: bool = True):
         """Return a guided capture script covering angles and lighting."""

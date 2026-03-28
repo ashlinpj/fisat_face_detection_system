@@ -37,11 +37,19 @@ def init_database():
             department TEXT,
             year INTEGER,
             face_embedding TEXT,
+            face_embeddings_multi TEXT,
             face_image_path TEXT,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     ''')
+
+    # Migration: add face_embeddings_multi column if missing (existing databases)
+    try:
+        cursor.execute("ALTER TABLE students ADD COLUMN face_embeddings_multi TEXT")
+        print("  Migrated: added face_embeddings_multi column")
+    except sqlite3.OperationalError:
+        pass  # Column already exists
     
     # Visit logs table - tracks canteen visits
     cursor.execute('''
@@ -77,7 +85,8 @@ def init_database():
     print("Database initialized successfully!")
 
 def add_student(student_id: str, name: str, department: str, year: int, 
-                face_embedding: np.ndarray, face_image_path: str) -> bool:
+                face_embedding: np.ndarray, face_image_path: str,
+                face_embeddings_multi: list = None) -> bool:
     """Add a new student to the database"""
     try:
         conn = get_connection()
@@ -85,11 +94,14 @@ def add_student(student_id: str, name: str, department: str, year: int,
         
         # Convert embedding to JSON string for storage
         embedding_json = json.dumps(face_embedding.tolist())
+        multi_json = None
+        if face_embeddings_multi:
+            multi_json = json.dumps([e.tolist() if hasattr(e, 'tolist') else e for e in face_embeddings_multi])
         
         cursor.execute('''
-            INSERT INTO students (student_id, name, department, year, face_embedding, face_image_path)
-            VALUES (?, ?, ?, ?, ?, ?)
-        ''', (student_id, name, department, year, embedding_json, face_image_path))
+            INSERT INTO students (student_id, name, department, year, face_embedding, face_embeddings_multi, face_image_path)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        ''', (student_id, name, department, year, embedding_json, multi_json, face_image_path))
         
         conn.commit()
         conn.close()
@@ -115,6 +127,12 @@ def get_all_students() -> List[dict]:
         student = dict(row)
         if student['face_embedding']:
             student['face_embedding'] = np.array(json.loads(student['face_embedding']))
+        # Load multi-embeddings gallery
+        multi_raw = student.get('face_embeddings_multi')
+        if multi_raw:
+            student['face_embeddings_multi'] = [np.array(e) for e in json.loads(multi_raw)]
+        else:
+            student['face_embeddings_multi'] = None
         students.append(student)
     
     conn.close()
@@ -139,7 +157,8 @@ def get_student_by_id(student_id: str) -> Optional[dict]:
 
 def update_student(student_id: str, name: str = None, department: str = None, 
                    year: int = None, face_embedding: np.ndarray = None, 
-                   face_image_path: str = None) -> bool:
+                   face_image_path: str = None,
+                   face_embeddings_multi: list = None) -> bool:
     """Update student information"""
     try:
         conn = get_connection()
@@ -160,6 +179,10 @@ def update_student(student_id: str, name: str = None, department: str = None,
         if face_embedding is not None:
             updates.append("face_embedding = ?")
             values.append(json.dumps(face_embedding.tolist()))
+        if face_embeddings_multi is not None:
+            updates.append("face_embeddings_multi = ?")
+            multi_json = json.dumps([e.tolist() if hasattr(e, 'tolist') else e for e in face_embeddings_multi])
+            values.append(multi_json)
         if face_image_path:
             updates.append("face_image_path = ?")
             values.append(face_image_path)
