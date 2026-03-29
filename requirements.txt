@@ -1,0 +1,27 @@
+# Face Detection System Requirements
+# College Canteen Face Detection System - B.Tech Mini Project
+
+# Core Dependencies
+opencv-python>=4.8.0
+numpy>=1.24.0
+Pillow>=10.0.0
+
+# YOLO - Ultralytics (Latest YOLOv8)
+ultralytics>=8.1.0
+
+# Face Recognition
+deepface>=0.0.79
+tensorflow>=2.13.0
+
+# GUI
+tk>=0.1.0
+
+# Web GUI
+flask>=3.0.0
+
+# Database (built-in with Python, just for reference)
+# sqlite3 - included in Python standard library
+
+# Optional - for better performance
+# onnxruntime>=1.16.0  # For faster inference
+# opencv-contrib-python>=4.8.0  # For additional OpenCV features
