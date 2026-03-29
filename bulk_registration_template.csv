@@ -1,0 +1,3 @@
+student_id,name,department,year,photos,photos_folder
+21CS001,John Doe,CSE,3,,21CS001
+21CS002,Jane Smith,ECE,2,"photos/jane/front.jpg;photos/jane/left.jpg;photos/jane/right.jpg",
