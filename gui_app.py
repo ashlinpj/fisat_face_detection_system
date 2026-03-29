@@ -569,28 +569,14 @@ class CanteenFaceDetectionGUI:
 
                     if frame is None:
                         consecutive_failures += 1
-                        now = time.time()
-
-                        # Auto-reconnect if stream appears frozen
+                        # Reconnect is intentionally handled by video_loop via _reopen_rtsp_capture().
+                        # Reopening inside this capture thread can race with FFmpeg decoder threads
+                        # and trigger libavcodec async_lock assertions.
                         if config.USE_RTSP and (
                             consecutive_failures >= max_consecutive_failures
-                            or (now - last_good_frame_time) > frozen_threshold
+                            or (time.time() - last_good_frame_time) > frozen_threshold
                         ):
-                            print(f"⚠ RTSP frozen for {now - last_good_frame_time:.1f}s — reconnecting...")
-                            try:
-                                with self.cap_lock:
-                                    if self.cap:
-                                        self.cap.release()
-                                    self.cap = cv2.VideoCapture(config.RTSP_URL, cv2.CAP_FFMPEG)
-                                    self.cap.set(cv2.CAP_PROP_BUFFERSIZE, config.RTSP_BUFFER_SIZE)
-                                    self.cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*'H264'))
-                                    if config.RTSP_TARGET_FPS:
-                                        self.cap.set(cv2.CAP_PROP_FPS, config.RTSP_TARGET_FPS)
-                                consecutive_failures = 0
-                                last_good_frame_time = time.time()
-                            except Exception as e:
-                                print(f"  Reconnect error: {e}")
-                                time.sleep(1.0)
+                            time.sleep(0.02)
                             continue
 
                         time.sleep(0.005)  # Brief sleep, recover quickly

@@ -103,21 +103,26 @@ FPS = 60
 # - int camera index (e.g., 0, 1)
 # - RTSP URL (recommended for Android IP Webcam app)
 # - HTTP MJPEG URL (Android IP Webcam often provides /video endpoint)
+# go2rtc-first mode using two local relay streams for multi-camera detection.
+# Quick rollback to single stream: set USE_MULTI_CAMERA=False and keep only one source.
 USE_MULTI_CAMERA = True
 CAMERA_SOURCES = [
-	"rtsp://192.168.1.2:8080/h264.sdp",
-	"rtsp://192.168.1.3:8080/h264.sdp",
+	"rtsp://127.0.0.1:8554/cam1",
+	"rtsp://127.0.0.1:8554/cam2",
+	# "rtsp://192.168.1.2:8080/h264.sdp",
+	# "rtsp://192.168.1.3:8080/h264.sdp",
 	# "http://192.168.1.52:8080/video",
 ]
 
 # RTSP Stream settings
 USE_RTSP = True  # Use RTSP stream instead of laptop webcam
 # go2rtc relay settings (recommended for low-latency development)
-GO2RTC_STREAM_NAME = "cam"
+GO2RTC_STREAM_NAME = "cam1"
 GO2RTC_SOURCE_URL = "rtsp://192.168.1.2:8080/h264.sdp"  # Original camera stream ingested by go2rtc
-RTSP_URL = GO2RTC_SOURCE_URL  # Use direct camera RTSP URL; switch back to local relay when go2rtc is running
+GO2RTC_RELAY_URL = f"rtsp://127.0.0.1:8554/{GO2RTC_STREAM_NAME}"
+RTSP_URL = GO2RTC_RELAY_URL  # App reads local go2rtc relay (recommended for stability)
 # Alternative RTSP URL examples:
-# RTSP_URL = f"rtsp://127.0.0.1:8554/{GO2RTC_STREAM_NAME}"  # App reads local low-latency go2rtc relay
+# RTSP_URL = GO2RTC_SOURCE_URL  # Quick rollback to direct camera RTSP
 # RTSP_URL = "rtsp://username:password@192.168.1.100:554/stream"
 RTSP_RECONNECT_ATTEMPTS = 5  # Number of reconnection attempts
 RTSP_RECONNECT_DELAY = 2  # Seconds between reconnection attempts
@@ -132,6 +137,7 @@ RTSP_OPENCV_OPTIONS = {
 	"rtsp_transport": RTSP_TRANSPORT,
 	"fflags": "nobuffer+discardcorrupt+flush_packets",
 	"flags": "low_delay",
+	"threads": "1",            # Single decode thread avoids libavcodec async_lock crashes on unstable RTSP streams
 	"avioflags": "direct",
 	"probesize": "32",
 	"analyzeduration": "0",
@@ -144,7 +150,7 @@ RTSP_OPENCV_OPTIONS = {
 
 # Number of grab() calls before each read() to skip queued frames when processing lags
 RTSP_PREGRAB_COUNT = 2  # Grab 2 stale frames before reading fresh one (was 1)
-RTSP_USE_HW_ACCEL = True  # Ask OpenCV/FFmpeg to use hardware decode when available
+RTSP_USE_HW_ACCEL = False  # Safer default: avoid hardware-decoder async_lock crashes on some RTSP/H264 feeds
 RTSP_FROZEN_THRESHOLD_SEC = 2.0  # Auto-reconnect if no frame arrives for this duration
 RTSP_AUTO_RECONNECT = True  # Enable automatic RTSP reconnection on frozen stream
 
