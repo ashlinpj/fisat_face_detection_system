@@ -1,380 +1,257 @@
-# 🍽️ College Canteen Face Detection System
+# College Face Detection and Recognition System
+
+Primarily a college face detection and recognition system for student monitoring and safety.
+
+This project is implemented mainly for college use. It tracks student presence across camera feeds, identifies known individuals, flags unknown visitors, and provides admin tools for registration, reporting, and bulk onboarding.
 
 ## B.Tech Mini Project
 
-A real-time face detection and recognition system designed to track student visits to the college canteen. This system helps prevent false complaints by maintaining a record of who visited the canteen with timestamps.
+Academic Year: 2025-26
 
----
+## Key Features
 
-## 📋 Features
+- Real-time face detection and recognition
+- Designed primarily for college campus/canteen deployment
+- Crowd presence monitoring across live camera streams
+- Multi-camera support (USB/RTSP/network sources)
+- Gallery-based matching from multiple registration photos
+- Automatic visit logging with timestamps and duration
+- Unknown face detection and storage
+- Admin GUI (Tkinter) for day-to-day operations
+- Bulk student import from CSV + photo folders
+- Export and statistics for daily/weekly analysis
+- SQLite-based local persistent storage
 
-- **Real-time Face Detection** using YOLOv8 and DeepFace
-- **Face Recognition** to identify registered students
-- **RTSP Stream Support** - Use network cameras or OBS streams
-- **Automatic Reconnection** for RTSP streams
-- **Automatic Visit Logging** with date, time, and duration tracking
-- **Student Registration** with face capture
-- **Bulk Student Registration** from CSV + photo folders
-- **Unknown Face Detection** for identifying unregistered visitors
-- **GUI Application** with modern Tkinter interface
-- **Statistics & Reports** for daily/weekly analysis
-- **CSV Export** for visit logs
-- **SQLite Database** for persistent storage
+## Technology Stack
 
----
+| Component | Technology |
+| --- | --- |
+| Detection | YOLOv8 + OpenCV detectors |
+| Recognition | DeepFace embeddings (default: SFace) |
+| Database | SQLite |
+| GUI | Tkinter |
+| Video ingest | OpenCV + FFmpeg (RTSP support) |
+| Language | Python 3.10+ |
 
-## 🛠️ Technology Stack
+## Project Structure
 
-| Component        | Technology            |
-| ---------------- | --------------------- |
-| Face Detection   | YOLOv8 (Ultralytics)  |
-| Face Recognition | DeepFace (Facenet512) |
-| Database         | SQLite                |
-| GUI              | Tkinter               |
-| Image Processing | OpenCV                |
-| Language         | Python 3.10+          |
-
----
-
-## 📁 Project Structure
-
-```
+```text
 fisat_face_detection_system/
-├── config.py                  # Configuration settings
-├── database.py                # Database operations
-├── face_recognition_module.py # Face detection & recognition
-├── gui_app.py                 # GUI application (Tkinter)
-├── main.py                    # Command-line application
-├── requirements.txt           # Python dependencies
-├── setup.py                   # Setup script (optional)
-├── start.bat                  # Windows batch starter
-├── test_system.py             # System test script
-├── utils.py                   # Utility functions
-├── README.md                  # Project documentation
-├── database/                  # Database folder
-│   ├── canteen.db             # SQLite database file
-│   └── faces/                 # Stored face images (per student)
-├── screenshots/               # Captured screenshots
-├── __pycache__/               # Python bytecode cache
-│   └── ...                    # Compiled .pyc files
-└── venv/                      # (Optional) Virtual environment
-    └── ...
+|- camera_pipeline.py
+|- config.py
+|- database.py
+|- face_matcher.py
+|- face_recognition_module.py
+|- gui_app.py
+|- main.py
+|- requirements.txt
+|- test_system.py
+|- test_rtsp.py
+|- bulk_registration_template.csv
+|- RTSP_QUICK_START.md
+|- RTSP_SETUP_GUIDE.md
+|- go2rtc.yaml
+`- database/
+   `- faces/
 ```
 
----
-
-## ⚙️ Installation
+## Installation
 
 ### Prerequisites
 
-- Python 3.10 or higher
-- Webcam/USB Camera or RTSP Stream (e.g., from OBS, IP Camera)
-- Windows/Linux/MacOS
+- Python 3.10 or later
+- Camera source: USB webcam or RTSP stream
+- Windows/Linux/macOS
 
-### Step 1: Clone or Download
+### 1) Clone
 
 ```bash
-https://github.com/ashlinpj/fisat_face_detection_system.git
+git clone https://github.com/ashlinpj/fisat_face_detection_system.git
+cd fisat_face_detection_system
 ```
 
-### Step 2: Create Virtual Environment (Recommended)
+### 2) Create and activate virtual environment
 
 ```bash
-python -m venv venv
+python -m venv .venv
 
 # Windows
-venv\Scripts\activate
+.venv\Scripts\activate
 
-# Linux/Mac
-source venv/bin/activate
+# Linux/macOS
+source .venv/bin/activate
 ```
 
-### Step 3: Install Dependencies
+### 3) Install dependencies
 
 ```bash
 pip install -r requirements.txt
 ```
 
-### Step 4: First Run (Downloads YOLO model automatically)
-
-```bash
-python main.py
-```
-
----
-
-## 🚀 Usage
-
-### Option 1: GUI Application (Recommended)
+### 4) Run the app
 
 ```bash
 python gui_app.py
 ```
 
-**Features:**
-
-- 📹 Live Detection tab - Real-time face detection
-- 👥 Students tab - Manage registered students
-- 📋 Visit Logs tab - View and export visit history
-- 📊 Statistics tab - Daily/weekly statistics
-
-### Option 2: Command Line Application
+For CLI mode:
 
 ```bash
 python main.py
 ```
 
-**Menu Options:**
+## Registration Methods
 
-1. Start Real-time Detection
-2. Register New Student
-3. View Statistics
-4. View Today's Logs
-5. List All Students
-6. Exit
-
-### Keyboard Controls (During Detection)
-
-| Key   | Action               |
-| ----- | -------------------- |
-| Q     | Quit detection       |
-| R     | Register new student |
-| S     | Show statistics      |
-| L     | Show today's logs    |
-| Space | Capture screenshot   |
-
----
-
-## 📸 How to Register Students
-
-### Method 1: During Live Detection
+### Method 1: Live capture from camera
 
 1. Open the app (`python gui_app.py` or `python main.py`)
-2. Press `R` or click "Register Face" (detection does not need to be running)
-3. Enter student details:
-   - Student ID (e.g., 21CS001)
-   - Full Name
-   - Department (CSE, ECE, etc.)
-   - Year (1-4)
-4. Look at the camera
-5. System captures and registers the face
+2. Press `R` or click `Register Face`
+3. Enter student details (ID, name, department, year)
+4. Follow pose instructions
+5. System registers a multi-sample profile
 
-### Method 2: Register from Image File (Admin)
+### Method 2: Single image registration
 
-1. Go to the **Students** tab in the GUI
-2. Click **🖼️ Register from Image**
-3. Select a high-resolution student photo (JPG/PNG)
-4. Enter student details when prompted
-5. The system will detect, enhance, and register the student from the image
+1. Open GUI -> `Students` tab
+2. Click `Register from Image`
+3. Select one photo and fill student details
 
-### Method 3: Bulk Register Many Students (CSV + Photos)
+### Method 3: Multi-photo registration (recommended)
 
-1. Go to the **Students** tab in the GUI
-2. Click **📦 Bulk Import CSV**
-3. Select a CSV file with at least these columns:
-    - `student_id`
-    - `name`
-    - `department`
-    - `year`
-4. Add one of these optional columns per row:
-    - `photos`: semicolon-separated image paths
-    - `photos_folder`: folder containing that student's photos
-5. Choose a **Base Photos Folder** (used for relative paths and fallback lookup)
-6. Click **Start Bulk Import**
+1. Open GUI -> `Students` tab
+2. Click `Register from Photos`
+3. Select 20-30+ photos from different angles/lighting
+4. Submit details to create a stronger gallery profile
 
-Notes:
+### Method 4: Bulk CSV import
+
+1. Open GUI -> `Students` tab
+2. Click `Bulk Import CSV`
+3. Choose your CSV file and a base photos folder
+4. Start import and monitor progress/logs
+
+Required CSV columns:
+
+- `student_id`
+- `name`
+- `department`
+- `year`
+
+Optional CSV columns:
+
+- `photos`: semicolon-separated image paths
+- `photos_folder`: folder path containing a student's images
+
+Fallback behavior:
+
 - If both optional columns are empty, importer tries `<base_folder>/<student_id>/`.
-- Supported image formats: JPG, JPEG, PNG, BMP, WEBP.
-- Existing students with same `student_id` are updated with new gallery embeddings.
 
-### Method 2: Batch Registration (Advanced)
+Reference template:
 
-You can also add faces programmatically:
+- `bulk_registration_template.csv`
 
-```python
-from face_recognition_module import FaceRecognitionSystem
-import cv2
+## RTSP and go2rtc
 
-system = FaceRecognitionSystem()
+The app supports direct RTSP sources and optional go2rtc relay.
 
-# Capture frame from camera or load image
-frame = cv2.imread("student_photo.jpg")
+In `config.py`:
 
-# Register student
-system.register_new_student(
-    frame=frame,
-    student_id="21CS001",
-    name="John Doe",
-    department="CSE",
-    year=3
-)
-```
+- Set `USE_RTSP = True`
+- Configure `RTSP_URL`
 
----
-
-## � RTSP Stream Support
-
-The system now supports RTSP streams from network cameras, OBS, and other RTSP sources!
-
-### Quick Setup with OBS
-
-1. **Install OBS Studio** and the **RTSP Server Plugin**
-2. **Configure RTSP** in OBS (Tools → RTSP Server Settings)
-3. **Update config.py:**
-   ```python
-   USE_RTSP = True
-   RTSP_URL = "rtsp://127.0.0.1:8554/live"
-   ```
-4. **Run the application** - It will connect to the RTSP stream automatically!
-
-### Test Your RTSP Connection
-
-```bash
-python test_rtsp.py
-```
-
-### Full Setup Guides
-
-- 📖 **Quick Start:** See [RTSP_QUICK_START.md](RTSP_QUICK_START.md) - 5-minute setup
-- 📚 **Complete Guide:** See [RTSP_SETUP_GUIDE.md](RTSP_SETUP_GUIDE.md) - Full documentation
-
-### RTSP Features
-
-- ✅ Automatic reconnection on connection loss
-- ✅ Support for IP cameras with authentication
-- ✅ Low-latency streaming with TCP/UDP
-- ✅ Configurable buffer size and reconnection attempts
-- ✅ Easy switching between webcam and RTSP
-
----
-
-## �📊 Database Schema
-
-### Students Table
-
-| Column          | Type      | Description        |
-| --------------- | --------- | ------------------ |
-| id              | INTEGER   | Primary Key        |
-| student_id      | TEXT      | Unique Student ID  |
-| name            | TEXT      | Student Name       |
-| department      | TEXT      | Department         |
-| year            | INTEGER   | Year of Study      |
-| face_embedding  | TEXT      | Face vector (JSON) |
-| face_image_path | TEXT      | Path to face image |
-| created_at      | TIMESTAMP | Registration time  |
-
-### Visit Logs Table
-
-| Column           | Type      | Description              |
-| ---------------- | --------- | ------------------------ |
-| id               | INTEGER   | Primary Key              |
-| student_id       | TEXT      | Student ID               |
-| student_name     | TEXT      | Student Name             |
-| entry_time       | TIMESTAMP | Entry time               |
-| exit_time        | TIMESTAMP | Exit time                |
-| duration_minutes | INTEGER   | Visit duration           |
-| date             | DATE      | Visit date               |
-| is_known         | INTEGER   | 1=Known, 0=Unknown       |
-| screenshot_path  | TEXT      | Path to visit screenshot |
-
----
-
-## ⚙️ Configuration
-
-Edit `config.py` to customize:
+Direct camera (current default style):
 
 ```python
-# Camera settings
-CAMERA_INDEX = 0              # Change if multiple cameras
-FRAME_WIDTH = 1280
-FRAME_HEIGHT = 720
-
-# Recognition settings
-CONFIDENCE_THRESHOLD = 0.5    # YOLO detection confidence
-FACE_RECOGNITION_THRESHOLD = 0.6  # Face matching threshold
-
-# Time settings
-MIN_TIME_BETWEEN_LOGS = 30    # Seconds between same person logs
+RTSP_URL = "rtsp://192.168.x.x:8080/h264.sdp"
 ```
 
----
+go2rtc relay (recommended when stream stability is an issue):
 
-## 🔧 Troubleshooting
+```python
+GO2RTC_STREAM_NAME = "cam"
+RTSP_URL = f"rtsp://127.0.0.1:8554/{GO2RTC_STREAM_NAME}"
+```
 
-### Camera not detected
+Useful files:
 
-- Check if camera is connected
-- Try different `CAMERA_INDEX` values (0, 1, 2)
-- Ensure no other application is using the camera
+- `go2rtc.yaml`
+- `start_go2rtc.bat`
+- `update_go2rtc_config.ps1`
+- `RTSP_QUICK_START.md`
+- `RTSP_SETUP_GUIDE.md`
+- `RTSP_IMPLEMENTATION.md`
 
-### Low detection accuracy
+## Configuration Quick Guide
 
-- Ensure good lighting
-- Face should be clearly visible
-- Increase `FACE_RECOGNITION_THRESHOLD` for stricter matching
+Edit `config.py` for your setup.
 
-### Slow performance
+Important options:
 
-- Reduce `FRAME_WIDTH` and `FRAME_HEIGHT`
-- Use GPU if available (CUDA-enabled TensorFlow)
+- `FACE_RECOGNITION_THRESHOLD`: Higher = stricter match acceptance
+- `FACE_MATCH_MARGIN`: Extra separation needed between top candidates
+- `USE_MULTI_CAMERA`: Enable recognition across multiple configured sources
+- `CAMERA_SOURCES`: List of USB indexes and/or RTSP URLs
+- `RTSP_USE_HW_ACCEL`: Hardware decode toggle
+- `RTSP_TARGET_FPS`: Lower this if stream is unstable
 
-### Model download issues
+## Troubleshooting
 
-- Ensure internet connection for first run
-- Models are cached after first download
+### 1) A known student appears as Unknown on one camera
 
----
+- Register more diverse photos (angles, distance, lighting)
+- Prefer `Register from Photos` with 20-30+ images
+- Slightly lower `FACE_RECOGNITION_THRESHOLD` if too strict
+- Check that the problematic camera is not low-light or blurry
 
-## 📈 Use Cases
+### 2) FFmpeg/H.264 decode errors (macroblock/async lock)
 
-1. **Prevent False Complaints**: Students claiming they didn't eat at canteen
-2. **Attendance Tracking**: Monitor canteen usage patterns
-3. **Security**: Identify unknown individuals
-4. **Analytics**: Peak hours, popular times, visitor frequency
+- Usually caused by unstable RTSP transport or damaged packets
+- Switch to go2rtc relay URL and test again
+- Reduce source bitrate/FPS from camera app or OBS
+- Try `RTSP_USE_HW_ACCEL = False` if decoder instability appears
+- Keep `RTSP_TRANSPORT = "tcp"` for better reliability
 
----
+### 3) Camera not opening
 
-## 🎓 Project Details
+- Verify source URL/index in `config.py`
+- Ensure no other app is locking the camera
+- Test stream with `python test_rtsp.py`
 
-**Project Type:** B.Tech Mini Project  
-**Domain:** Computer Vision, Machine Learning  
-**Academic Year:** 2025-26
+### 4) Slow performance
 
-### Technologies Learned
+- Lower frame size in config
+- Reduce stream FPS
+- Limit processing load (frame-skip settings)
 
-- Deep Learning (YOLO, CNN)
-- Face Recognition Systems
-- Real-time Image Processing
-- Database Management
-- GUI Development
-- Python Programming
+## Validation Scripts
 
----
+- `python test_system.py` - general system checks
+- `python test_rtsp.py` - RTSP connectivity checks
+- `python diagnose_embeddings.py` - embedding/gallery diagnostics
 
-## 📝 Future Enhancements
+## Database Overview
 
-- [ ] Web-based dashboard
-- [ ] Mobile app for registration
-- [ ] Multiple camera support
-- [ ] Cloud database integration
-- [ ] Email/SMS notifications
-- [ ] Face mask detection
-- [ ] Anti-spoofing measures
+Main tables:
 
----
+- `students`
+- `visit_logs`
 
-## 👥 Contributors
+Data location:
 
-- Add your team members here
+- `database/canteen.db`
+- face galleries under `database/faces/`
 
----
+## Future Enhancements
 
-## 📄 License
+- Web dashboard
+- Mobile registration companion
+- Cloud sync and backup
+- Anti-spoofing/liveness checks
 
-This project is developed for educational purposes as part of B.Tech curriculum.
+## License
 
----
+Educational project for B.Tech curriculum use.
 
-## 🆘 Support
+## Support
 
-For issues or questions, contact your project guide or create an issue in the repository.
+For issues, open a GitHub issue in this repository.
