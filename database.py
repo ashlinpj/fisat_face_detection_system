@@ -15,6 +15,8 @@ def ensure_directories():
     """Create necessary directories if they don't exist"""
     os.makedirs(os.path.dirname(config.DATABASE_PATH), exist_ok=True)
     os.makedirs(config.FACES_DIR, exist_ok=True)
+    os.makedirs(config.SCREENSHOTS_DIR, exist_ok=True)
+    os.makedirs(getattr(config, 'UNKNOWN_FACES_DIR', os.path.join(config.FACES_DIR, 'unknown_faces')), exist_ok=True)
 
 def get_connection():
     """Get database connection"""
@@ -314,12 +316,18 @@ def add_unknown_face(face_image_path: str, face_embedding: np.ndarray) -> int:
         print(f"Error adding unknown face: {e}")
         return -1
 
-def get_unknown_faces() -> List[dict]:
-    """Get all unknown faces"""
+def get_unknown_faces(date: str = None) -> List[dict]:
+    """Get unknown faces, optionally filtered by first_seen date (YYYY-MM-DD)."""
     conn = get_connection()
     cursor = conn.cursor()
-    
-    cursor.execute('SELECT * FROM unknown_faces ORDER BY last_seen DESC')
+
+    if date:
+        cursor.execute(
+            "SELECT * FROM unknown_faces WHERE DATE(first_seen, 'localtime') = ? ORDER BY last_seen DESC",
+            (date,)
+        )
+    else:
+        cursor.execute('SELECT * FROM unknown_faces ORDER BY last_seen DESC')
     rows = cursor.fetchall()
     
     faces = []
@@ -348,9 +356,16 @@ def get_daily_statistics(date: str = None) -> dict:
     cursor.execute('SELECT COUNT(DISTINCT student_id) FROM visit_logs WHERE date = ? AND is_known = 1', (date,))
     unique_visitors = cursor.fetchone()[0]
     
-    # Unknown visitors
+    # Unknown visitors from visit logs (legacy path)
     cursor.execute('SELECT COUNT(*) FROM visit_logs WHERE date = ? AND is_known = 0', (date,))
-    unknown_visitors = cursor.fetchone()[0]
+    unknown_from_logs = cursor.fetchone()[0]
+
+    # Unknown faces saved in unknown_faces (current path)
+    cursor.execute("SELECT COUNT(*) FROM unknown_faces WHERE DATE(first_seen, 'localtime') = ?", (date,))
+    unknown_from_unknown_faces = cursor.fetchone()[0]
+
+    # Use the larger count to avoid under-reporting while preventing double-count inflation.
+    unknown_visitors = max(unknown_from_logs, unknown_from_unknown_faces)
     
     # Average duration
     cursor.execute('SELECT AVG(duration_minutes) FROM visit_logs WHERE date = ? AND duration_minutes IS NOT NULL', (date,))

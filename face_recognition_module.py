@@ -280,6 +280,7 @@ class FaceRecognitionSystem:
                         self.result_queue.put_nowait({
                             'student': best_match,
                             'confidence': best_score,
+                            'embedding': embedding,
                             'bbox': bbox,
                             'timestamp': timestamp,
                             'face_crop': face_crop,
@@ -294,6 +295,7 @@ class FaceRecognitionSystem:
                         self.result_queue.put_nowait({
                             'student': best_match,
                             'confidence': best_score,
+                            'embedding': embedding,
                             'bbox': bbox,
                             'timestamp': timestamp,
                             'face_crop': face_crop,
@@ -1249,6 +1251,7 @@ class FaceRecognitionSystem:
         def _handle_result(result):
             student = result['student']
             confidence = result['confidence']
+            embedding = result.get('embedding')
             timestamp = result['timestamp']
             face_crop = result['face_crop']
             bbox = result.get('bbox', None)
@@ -1265,6 +1268,14 @@ class FaceRecognitionSystem:
 
             # Persistence/logging is delegated to VisitLogger to keep process_frame focused on CV flow.
             self.visit_logger.try_log_known_visit(student, confidence, timestamp, face_crop)
+
+            # Save unknown faces only after stable Unknown labeling and cooldown window.
+            if bbox is not None and student is None:
+                matched_key = self._match_bbox_key(bbox, list(current_recognized_faces.keys()))
+                if matched_key is not None:
+                    stable_info = current_recognized_faces.get(matched_key)
+                    if stable_info and not stable_info.get('is_known', False):
+                        self.visit_logger.try_log_unknown_face(timestamp, face_crop, embedding)
 
         # Process deferred results for this stream first.
         for deferred_result in self.deferred_results_by_stream.pop(stream_key, []):

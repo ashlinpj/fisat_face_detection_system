@@ -311,6 +311,9 @@ class CanteenFaceDetectionGUI:
         
         clear_btn = ttk.Button(filter_frame, text="Clear", command=self.clear_log_filters)
         clear_btn.pack(side=tk.LEFT, padx=5)
+
+        unknown_btn = ttk.Button(filter_frame, text="🕵 Unknown Faces", command=self.open_unknown_faces_view)
+        unknown_btn.pack(side=tk.LEFT, padx=5)
         
         export_btn = ttk.Button(filter_frame, text="📥 Export CSV", command=self.export_logs)
         export_btn.pack(side=tk.RIGHT, padx=5)
@@ -2090,6 +2093,152 @@ class CanteenFaceDetectionGUI:
         self.log_date_var.set(datetime.now().strftime('%Y-%m-%d'))
         self.log_student_var.set('')
         self.refresh_logs()
+
+    def open_unknown_faces_view(self):
+        """Open a window to browse saved unknown-face screenshots."""
+        if hasattr(self, 'unknown_window') and self.unknown_window and self.unknown_window.winfo_exists():
+            self.unknown_window.lift()
+            return
+
+        self.unknown_records = {}
+        self.unknown_preview_imgtk = None
+
+        self.unknown_window = tk.Toplevel(self.root)
+        self.unknown_window.title("Unknown Faces")
+        self.unknown_window.geometry("980x560")
+
+        top_frame = ttk.Frame(self.unknown_window, padding="10")
+        top_frame.pack(fill=tk.X)
+
+        ttk.Label(top_frame, text="Date:").pack(side=tk.LEFT, padx=(0, 5))
+        self.unknown_date_var = tk.StringVar(value=datetime.now().strftime('%Y-%m-%d'))
+        ttk.Entry(top_frame, textvariable=self.unknown_date_var, width=14).pack(side=tk.LEFT, padx=(0, 8))
+
+        ttk.Button(top_frame, text="🔄 Refresh", command=self.refresh_unknown_faces).pack(side=tk.LEFT, padx=4)
+        ttk.Button(top_frame, text="🖼 Open Image", command=self.open_selected_unknown_image).pack(side=tk.LEFT, padx=4)
+
+        content = ttk.Frame(self.unknown_window, padding=(10, 0, 10, 10))
+        content.pack(fill=tk.BOTH, expand=True)
+
+        left = ttk.Frame(content)
+        left.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+
+        columns = ('ID', 'First Seen', 'Last Seen', 'Times Seen', 'Image File')
+        self.unknown_tree = ttk.Treeview(left, columns=columns, show='headings')
+        for col in columns:
+            self.unknown_tree.heading(col, text=col)
+            self.unknown_tree.column(col, width=130)
+        self.unknown_tree.column('Image File', width=230)
+
+        unknown_scroll = ttk.Scrollbar(left, orient=tk.VERTICAL, command=self.unknown_tree.yview)
+        self.unknown_tree.configure(yscrollcommand=unknown_scroll.set)
+
+        self.unknown_tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        unknown_scroll.pack(side=tk.RIGHT, fill=tk.Y)
+
+        right = ttk.LabelFrame(content, text="Screenshot Preview", padding="10")
+        right.pack(side=tk.RIGHT, fill=tk.BOTH, expand=False, padx=(10, 0))
+
+        self.unknown_preview_label = ttk.Label(right, text="Select an unknown face record")
+        self.unknown_preview_label.pack(fill=tk.BOTH, expand=True)
+
+        self.unknown_path_label = ttk.Label(right, text="", wraplength=320, justify=tk.LEFT)
+        self.unknown_path_label.pack(fill=tk.X, pady=(8, 0))
+
+        self.unknown_tree.bind('<<TreeviewSelect>>', self.on_unknown_face_select)
+        self.refresh_unknown_faces()
+
+    def refresh_unknown_faces(self):
+        """Reload unknown-face entries (optionally filtered by date)."""
+        if not hasattr(self, 'unknown_tree'):
+            return
+
+        for item in self.unknown_tree.get_children():
+            self.unknown_tree.delete(item)
+
+        date_filter = self.unknown_date_var.get().strip() or None
+        rows = database.get_unknown_faces(date=date_filter)
+
+        self.unknown_records = {}
+        for row in rows:
+            row_id = str(row.get('id'))
+            self.unknown_records[row_id] = row
+
+            first_seen = (row.get('first_seen') or '')[:19]
+            last_seen = (row.get('last_seen') or '')[:19]
+            times_seen = row.get('times_seen', 1)
+            image_file = os.path.basename(row.get('face_image_path') or '')
+
+            self.unknown_tree.insert('', tk.END, values=(
+                row.get('id'),
+                first_seen,
+                last_seen,
+                times_seen,
+                image_file,
+            ))
+
+        if not rows:
+            self.unknown_preview_label.config(text="No unknown faces found for selected date", image='')
+            self.unknown_path_label.config(text="")
+
+    def on_unknown_face_select(self, _event=None):
+        """Preview selected unknown face screenshot in the side panel."""
+        if not hasattr(self, 'unknown_tree'):
+            return
+
+        selected = self.unknown_tree.selection()
+        if not selected:
+            return
+
+        item = self.unknown_tree.item(selected[0])
+        values = item.get('values', [])
+        if not values:
+            return
+
+        record = self.unknown_records.get(str(values[0]))
+        if not record:
+            return
+
+        image_path = record.get('face_image_path')
+        self.unknown_path_label.config(text=image_path or "")
+
+        if not image_path or not os.path.exists(image_path):
+            self.unknown_preview_label.config(text="Screenshot file not found", image='')
+            return
+
+        try:
+            img = Image.open(image_path)
+            img.thumbnail((340, 340))
+            self.unknown_preview_imgtk = ImageTk.PhotoImage(img)
+            self.unknown_preview_label.config(image=self.unknown_preview_imgtk, text='')
+        except Exception as e:
+            self.unknown_preview_label.config(text=f"Could not load image: {e}", image='')
+
+    def open_selected_unknown_image(self):
+        """Open selected unknown screenshot with system image viewer."""
+        if not hasattr(self, 'unknown_tree'):
+            return
+
+        selected = self.unknown_tree.selection()
+        if not selected:
+            messagebox.showwarning("Unknown Faces", "Select an unknown face record first.")
+            return
+
+        values = self.unknown_tree.item(selected[0]).get('values', [])
+        if not values:
+            return
+
+        record = self.unknown_records.get(str(values[0]))
+        image_path = (record or {}).get('face_image_path')
+
+        if not image_path or not os.path.exists(image_path):
+            messagebox.showwarning("Unknown Faces", "Screenshot file not found.")
+            return
+
+        try:
+            os.startfile(image_path)
+        except Exception as e:
+            messagebox.showerror("Unknown Faces", f"Could not open image:\n{e}")
     
     def export_logs(self):
         """Export logs to CSV"""

@@ -8,6 +8,7 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 # Database settings
 DATABASE_PATH = os.path.join(BASE_DIR, "database", "canteen.db")
 FACES_DIR = os.path.join(BASE_DIR, "database", "faces")
+UNKNOWN_FACES_DIR = os.path.join(BASE_DIR, "database", "unknown_faces")
 # Directory for visit screenshots
 SCREENSHOTS_DIR = os.path.join(BASE_DIR, "screenshots")
 
@@ -172,6 +173,7 @@ WINDOW_TITLE = "College Canteen Face Detection System"
 
 # Time settings
 MIN_TIME_BETWEEN_LOGS = 30  # Minimum seconds between logging same person
+UNKNOWN_FACE_SAVE_COOLDOWN_SECONDS = 15  # Save a new unknown face at most once per cooldown window (set 10/15 as needed)
 
 
 
