@@ -1,6 +1,7 @@
 # Database - contains personal face data
 database/canteen.db
 database/faces/
+database/unknown_faces/
 
 # Model files (auto-download)
 *.pt
