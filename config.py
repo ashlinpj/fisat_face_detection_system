@@ -110,16 +110,16 @@ USE_MULTI_CAMERA = True
 CAMERA_SOURCES = [
 	"rtsp://127.0.0.1:8554/cam1",
 	"rtsp://127.0.0.1:8554/cam2",
-	# "rtsp://192.168.1.2:8080/h264.sdp",
-	# "rtsp://192.168.1.3:8080/h264.sdp",
-	# "http://192.168.1.52:8080/video",
+	# "rtsp://10.165.125.164:8080/h264.sdp",
+	# "rtsp://10.165.125.20:8080/h264.sdp",
+	# "http://192.168.1.52:8080/video",	
 ]
 
 # RTSP Stream settings
 USE_RTSP = True  # Use RTSP stream instead of laptop webcam
 # go2rtc relay settings (recommended for low-latency development)
 GO2RTC_STREAM_NAME = "cam1"
-GO2RTC_SOURCE_URL = "rtsp://192.168.1.2:8080/h264.sdp"  # Original camera stream ingested by go2rtc
+GO2RTC_SOURCE_URL = "rtsp://10.165.125.164:8080/h264.sdp"  # Original camera stream ingested by go2rtc
 GO2RTC_RELAY_URL = f"rtsp://127.0.0.1:8554/{GO2RTC_STREAM_NAME}"
 RTSP_URL = GO2RTC_RELAY_URL  # App reads local go2rtc relay (recommended for stability)
 # Alternative RTSP URL examples:
